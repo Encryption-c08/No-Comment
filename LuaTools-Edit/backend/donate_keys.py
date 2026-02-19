@@ -10,8 +10,8 @@ from config import USER_AGENT
 from http_client import get_http_client
 from logger import logger
 
-# Import private VDF parser - it's used internally for config.vdf parsing
-from steam_utils import _parse_vdf_simple  # type: ignore
+                                                                         
+from steam_utils import _parse_vdf_simple                
 
 DONATION_URL = "http://167.235.229.108/donatekeys/send"
 DONATION_HEADERS = {
@@ -37,13 +37,13 @@ def validate_appid_key_pair(appid: str, key: str) -> bool:
     if not isinstance(appid, str) or not isinstance(key, str):
         return False
     
-    # Validate AppID: numeric only, max 10 digits
+                                                 
     if not appid.isdigit():
         return False
     if len(appid) > 10:
         return False
     
-    # Validate decryption key: exactly 64 chars, alphanumeric only
+                                                                  
     if len(key) != 64:
         return False
     if not re.match(r"^[a-zA-Z0-9]+$", key):
@@ -89,20 +89,20 @@ def parse_config_vdf_decryption_keys(steam_path: str) -> List[Tuple[str, str]]:
             if not isinstance(value, dict):
                 continue
             
-            # Check if this entry has a DecryptionKey
+                                                     
             decryption_key = value.get("DecryptionKey")
             if isinstance(decryption_key, str):
-                # This looks like an appid entry with a decryption key
+                                                                      
                 appid = str(key).strip()
                 key_value = str(decryption_key).strip()
                 
                 if appid and key_value:
                     pairs.append((appid, key_value))
             else:
-                # Recursively search nested dictionaries
+                                                        
                 find_decryption_keys(value, f"{path}.{key}" if path else key)
     
-    # Search recursively through the VDF structure
+                                                  
     find_decryption_keys(vdf_data)
     
     return pairs

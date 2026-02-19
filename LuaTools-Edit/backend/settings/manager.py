@@ -30,7 +30,7 @@ def _available_locale_codes() -> List[Dict[str, Any]]:
     manager = get_locale_manager()
     locales = manager.available_locales()
     if not locales:
-        # Guarantee default locale presence even if file missing
+                                                                
         locales = [{"code": DEFAULT_LOCALE, "name": "English", "nativeName": "English"}]
     return locales
 
@@ -186,7 +186,7 @@ def _validate_option_value(option: SettingOption, value: Any) -> Tuple[bool, Any
                 pass
             return False, option.default, "Value not in list of allowed options"
 
-    # Fallback: accept any value
+                                
     return True, value, None
 
 
@@ -341,7 +341,7 @@ def apply_settings_changes(changes: Dict[str, Any]) -> Dict[str, Any]:
         if errors:
             return {"success": False, "errors": errors}
 
-        # Ensure language is still valid even if no change applied
+                                                                  
         if _ensure_language_valid(updated):
             language_changed = True
 
@@ -367,7 +367,7 @@ def apply_settings_changes(changes: Dict[str, Any]) -> Dict[str, Any]:
         values_snapshot = copy.deepcopy(updated)
         language = str(values_snapshot.get("general", {}).get("language") or DEFAULT_LOCALE)
 
-        # Invoke hooks outside of file write but still under lock to maintain order.
+                                                                                    
         for option_key, previous, current_value in applied_changes:
             for callback in _CHANGE_HOOKS.get(option_key, []):
                 try:

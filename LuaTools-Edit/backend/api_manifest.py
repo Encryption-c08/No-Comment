@@ -44,7 +44,7 @@ def init_apis(content_script_query: str = "") -> str:
         logger.log(f"InitApis: Local file not found -> {api_json_path}")
         manifest_text = ""
         try:
-            # Try primary URL first
+                                   
             try:
                 logger.log(f"InitApis: Fetching manifest from {API_MANIFEST_URL}")
                 resp = client.get(API_MANIFEST_URL)

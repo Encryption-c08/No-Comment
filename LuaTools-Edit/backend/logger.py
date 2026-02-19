@@ -1,6 +1,6 @@
 """Shared logger instance for the LuaTools plugin backend."""
 
-import PluginUtils  # type: ignore
+import PluginUtils                
 
 _LOGGER_INSTANCE = None
 
@@ -13,7 +13,7 @@ def get_logger() -> PluginUtils.Logger:
     return _LOGGER_INSTANCE
 
 
-# Convenience alias so other modules can `from logger import logger`
+                                                                    
 logger = get_logger()
 
 

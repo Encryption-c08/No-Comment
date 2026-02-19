@@ -8,7 +8,7 @@ import subprocess
 import sys
 from typing import Dict, Optional
 
-import Millennium  # type: ignore
+import Millennium                
 
 from logger import logger
 
@@ -16,11 +16,11 @@ _STEAM_INSTALL_PATH: Optional[str] = None
 
 if sys.platform.startswith("win"):
     try:
-        import winreg  # type: ignore
-    except Exception:  # pragma: no cover - registry import failure fallback
-        winreg = None  # type: ignore
+        import winreg                
+    except Exception:                                                       
+        winreg = None                
 else:
-    winreg = None  # type: ignore
+    winreg = None                
 
 
 def detect_steam_install_path() -> str:

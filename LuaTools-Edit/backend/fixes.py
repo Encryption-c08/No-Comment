@@ -256,7 +256,7 @@ def _download_and_extract_fix(appid: int, download_url: str, install_path: str, 
 
         log_file_path = os.path.join(install_path, f"luatools-fix-log-{appid}.log")
         try:
-            # Read existing log to preserve previous fixes
+                                                          
             existing_content = ""
             if os.path.exists(log_file_path):
                 try:
@@ -265,16 +265,16 @@ def _download_and_extract_fix(appid: int, download_url: str, install_path: str, 
                 except Exception:
                     pass
 
-            # Append new fix entry
+                                  
             with open(log_file_path, "w", encoding="utf-8") as log_file:
-                # Write existing content first
+                                              
                 if existing_content:
                     log_file.write(existing_content)
                     if not existing_content.endswith("\n"):
                         log_file.write("\n")
-                    log_file.write("\n---\n\n")  # Separator between fixes
+                    log_file.write("\n---\n\n")                           
 
-                # Write new fix entry
+                                     
                 log_file.write(f'[FIX]\n')
                 log_file.write(f'Date: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n')
                 log_file.write(f'Game: {game_name or f"Unknown Game ({appid})"}\n')
@@ -369,16 +369,16 @@ def _unfix_game_worker(appid: int, install_path: str, fix_date: str = None):
 
         _set_unfix_state(appid, {"status": "removing", "progress": "Reading log file..."})
 
-        files_to_delete = set()  # Use set to avoid duplicates
-        remaining_fixes = []  # Fixes to keep in the log
+        files_to_delete = set()                               
+        remaining_fixes = []                            
 
         try:
             with open(log_file_path, "r", encoding="utf-8") as handle:
                 log_content = handle.read()
 
-            # Parse multiple fixes (new format with [FIX] markers)
+                                                                  
             if "[FIX]" in log_content:
-                # New format with multiple fixes
+                                                
                 fix_blocks = log_content.split("[FIX]")
                 for block in fix_blocks:
                     if not block.strip():
@@ -387,7 +387,7 @@ def _unfix_game_worker(appid: int, install_path: str, fix_date: str = None):
                     lines = block.split("\n")
                     in_files_section = False
                     block_date = None
-                    block_lines = []  # Store original block content
+                    block_lines = []                                
 
                     for line in lines:
                         line_stripped = line.strip()
@@ -401,16 +401,16 @@ def _unfix_game_worker(appid: int, install_path: str, fix_date: str = None):
                         if line_stripped == "Files:":
                             in_files_section = True
                         elif in_files_section and line_stripped:
-                            # If we're deleting a specific fix, only add files from that fix
+                                                                                            
                             if fix_date is None or (block_date and block_date == fix_date):
                                 files_to_delete.add(line_stripped)
 
-                    # If we're deleting a specific fix, keep the others
+                                                                       
                     if fix_date is not None and block_date and block_date != fix_date:
                         remaining_fixes.append("[FIX]\n" + "\n".join(block_lines) + "\n[/FIX]")
             else:
-                # Old format (single fix without markers) - legacy support
-                # Delete all files (no individual selection possible)
+                                                                          
+                                                                     
                 lines = log_content.split("\n")
                 in_files_section = False
                 for line in lines:
@@ -440,9 +440,9 @@ def _unfix_game_worker(appid: int, install_path: str, fix_date: str = None):
 
         logger.log(f"LuaTools: Deleted {deleted_count}/{len(files_to_delete)} files")
 
-        # Update or delete the log file
+                                       
         if remaining_fixes:
-            # We deleted a specific fix, update the log with remaining fixes
+                                                                            
             try:
                 with open(log_file_path, "w", encoding="utf-8") as handle:
                     handle.write("\n\n---\n\n".join(remaining_fixes))
@@ -450,7 +450,7 @@ def _unfix_game_worker(appid: int, install_path: str, fix_date: str = None):
             except Exception as exc:
                 logger.warn(f"LuaTools: Failed to update log file: {exc}")
         else:
-            # No fixes remaining, delete the log file
+                                                     
             try:
                 os.remove(log_file_path)
                 logger.log(f"LuaTools: Deleted log file {log_file_path}")
@@ -540,20 +540,20 @@ def get_installed_fixes() -> str:
             if not os.path.exists(steamapps_path):
                 continue
 
-            # Get all appmanifest files
+                                       
             try:
                 for filename in os.listdir(steamapps_path):
                     if not filename.startswith("appmanifest_") or not filename.endswith(".acf"):
                         continue
 
-                    # Extract appid from filename
+                                                 
                     try:
                         appid_str = filename.replace("appmanifest_", "").replace(".acf", "")
                         appid = int(appid_str)
                     except Exception:
                         continue
 
-                    # Parse manifest to get install directory
+                                                             
                     manifest_path = os.path.join(steamapps_path, filename)
                     try:
                         with open(manifest_path, "r", encoding="utf-8") as handle:
@@ -570,24 +570,24 @@ def get_installed_fixes() -> str:
                         if not os.path.exists(full_install_path):
                             continue
 
-                        # Check for luatools fix log
+                                                    
                         log_file_path = os.path.join(full_install_path, f"luatools-fix-log-{appid}.log")
                         if os.path.exists(log_file_path):
-                            # Parse the log file to get fix info (supports multiple fixes)
+                                                                                          
                             try:
                                 with open(log_file_path, "r", encoding="utf-8") as log_handle:
                                     log_content = log_handle.read()
 
-                                # Parse multiple fixes (new format with [FIX] markers)
+                                                                                      
                                 fixes_in_log = []
                                 if "[FIX]" in log_content:
-                                    # New format with multiple fixes
+                                                                    
                                     fix_blocks = log_content.split("[FIX]")
                                     for block in fix_blocks:
                                         if not block.strip():
                                             continue
 
-                                        # Extract data from this fix block
+                                                                          
                                         fix_data = {
                                             "appid": appid,
                                             "gameName": game_name,
@@ -622,10 +622,10 @@ def get_installed_fixes() -> str:
                                                 fix_data["files"].append(line)
 
                                         fix_data["filesCount"] = len(fix_data["files"])
-                                        if fix_data["date"]:  # Only add if it has a date (valid fix)
+                                        if fix_data["date"]:                                         
                                             fixes_in_log.append(fix_data)
                                 else:
-                                    # Old format (single fix without markers) - legacy support
+                                                                                              
                                     log_lines = log_content.split("\n")
                                     fix_data = {
                                         "appid": appid,
@@ -660,7 +660,7 @@ def get_installed_fixes() -> str:
                                     if fix_data["date"]:
                                         fixes_in_log.append(fix_data)
 
-                                # Add all fixes found for this game
+                                                                   
                                 for fix in fixes_in_log:
                                     installed_fixes.append(fix)
 

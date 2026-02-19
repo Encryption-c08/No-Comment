@@ -6,8 +6,8 @@ import webbrowser
 
 from typing import Any
 
-import Millennium  # type: ignore
-import PluginUtils  # type: ignore
+import Millennium                
+import PluginUtils                
 
 from api_manifest import (
     fetch_free_apis_now as api_fetch_free_apis_now,
@@ -57,7 +57,7 @@ from steam_utils import detect_steam_install_path, get_game_install_path_respons
 logger = shared_logger
 
 
-def GetPluginDir() -> str:  # Legacy API used by the frontend
+def GetPluginDir() -> str:                                   
     return get_plugin_dir()
 
 
@@ -219,7 +219,7 @@ def OpenExternalUrl(url: str, contentScriptQuery: str = "") -> str:
             return json.dumps({"success": False, "error": "Invalid URL"})
         if sys.platform.startswith("win"):
             try:
-                os.startfile(value)  # type: ignore[attr-defined]
+                os.startfile(value)                              
             except Exception:
                 webbrowser.open(value)
         else:
@@ -237,7 +237,7 @@ def OpenSteamUri(uri: str, contentScriptQuery: str = "") -> str:
             return json.dumps({"success": False, "error": "Invalid Steam URI"})
         if sys.platform.startswith("win"):
             try:
-                os.startfile(value)  # type: ignore[attr-defined]
+                os.startfile(value)                              
             except Exception:
                 webbrowser.open(value)
         else:
@@ -268,7 +268,7 @@ def GetSettingsConfig(contentScriptQuery: str = "") -> str:
 
 def ApplySettingsChanges(
     contentScriptQuery: str = "", changes: Any = None, **kwargs: Any
-) -> str:  # type: ignore[name-defined]
+) -> str:                              
     try:
         if "changes" in kwargs and changes is None:
             changes = kwargs["changes"]
@@ -293,7 +293,7 @@ def ApplySettingsChanges(
                 logger.warn("LuaTools: Failed to parse changes string payload")
                 return json.dumps({"success": False, "error": "Invalid JSON payload"})
             else:
-                # When a full payload dict was sent as JSON, unwrap keys we expect.
+                                                                                   
                 if isinstance(payload, dict) and "changes" in payload:
                     kwargs_payload = payload
                     payload = kwargs_payload.get("changes")
@@ -306,7 +306,7 @@ def ApplySettingsChanges(
                         logger.warn("LuaTools: Failed to parse changesJson string inside payload")
                         return json.dumps({"success": False, "error": "Invalid JSON payload"})
         elif isinstance(changes, dict) and changes:
-            # When the bridge passes a dict argument directly.
+                                                              
             if "changesJson" in changes and isinstance(changes["changesJson"], str):
                 try:
                     payload = json.loads(changes["changesJson"])
@@ -318,7 +318,7 @@ def ApplySettingsChanges(
             else:
                 payload = changes
         else:
-            # Look for JSON payload inside kwargs.
+                                                  
             changes_json = kwargs.get("changesJson")
             if isinstance(changes_json, dict):
                 payload = changes_json

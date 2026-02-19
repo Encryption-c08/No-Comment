@@ -67,7 +67,7 @@ def ensure_locales(base_dir: Path) -> int:
             updated_files += 1
             print(f"Updated missing keys in {locale_path.name}")
 
-    # Ensure English file uses sorted keys as well (no automatic fill)
+                                                                      
     write_locale(en_path, meta_en, strings_en)
 
     return updated_files

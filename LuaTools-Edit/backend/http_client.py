@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-import httpx  # type: ignore
+import httpx                
 
 from config import HTTP_TIMEOUT_SECONDS
 from logger import logger

@@ -89,7 +89,7 @@ def _fetch_github_latest(cfg: Dict[str, Any]) -> Dict[str, Any]:
     data: Optional[Dict[str, Any]] = None
     tag_name = ""
 
-    # Primary GitHub API
+                        
     try:
         resp = client.get(endpoint, headers=headers, follow_redirects=True)
         resp.raise_for_status()
@@ -203,7 +203,7 @@ def check_for_update_once() -> str:
     if not _download_and_extract_update(zip_url, pending_zip):
         return ""
 
-    # Attempt to extract immediately
+                                    
     try:
         with zipfile.ZipFile(pending_zip, "r") as archive:
             archive.extractall(get_plugin_dir())
@@ -288,7 +288,7 @@ def _start_initial_check_worker():
         else:
             _start_periodic_update_checks()
         
-        # Check and donate keys after update check completes
+                                                            
         _check_and_donate_keys()
     except Exception as exc:
         logger.warn(f"AutoUpdate: background check failed: {exc}")

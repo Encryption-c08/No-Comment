@@ -45,7 +45,7 @@ def _read_locale_file(locale: str) -> Tuple[Dict[str, Any], Dict[str, str]]:
     if isinstance(strings, dict):
         strings = {str(k): str(v) for k, v in strings.items()}
     else:
-        # Backwards compatibility with flat files
+                                                 
         strings = {}
         for key, value in data.items():
             if key == "_meta":
@@ -96,7 +96,7 @@ class LocaleManager:
         with self._lock:
             _ensure_locales_dir()
 
-            # Load default locale first
+                                       
             meta, strings = _read_locale_file(DEFAULT_LOCALE)
             if not strings:
                 logger.warn("LuaTools: Default locale en.json is empty or missing.")
@@ -143,7 +143,7 @@ class LocaleManager:
                     "raw": locale_strings,
                 }
 
-            # Ensure default locale is present in cache
+                                                       
             if DEFAULT_LOCALE not in self._locales:
                 self._locales[DEFAULT_LOCALE] = {
                     "meta": self._english_meta,
@@ -174,7 +174,7 @@ class LocaleManager:
             if not payload:
                 payload = self._locales.get(DEFAULT_LOCALE)
             strings = payload.get("strings", {}) if payload else {}
-            # Provide deep copy to avoid accidental mutation
+                                                            
             return dict(strings)
 
     def translate(self, key: str, locale: str) -> str:

@@ -102,7 +102,7 @@ def merge_defaults_with_values(values: Optional[Dict[str, Any]]) -> Dict[str, An
         existing_group = merged.get(group_key)
         if not isinstance(existing_group, dict):
             existing_group = {}
-        # Preserve unknown keys within the group.
+                                                 
         merged_group = {**group_defaults, **existing_group}
         merged[group_key] = merged_group
 
