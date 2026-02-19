@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import zipfile
@@ -31,6 +33,69 @@ from utils import (
 _UPDATE_CHECK_THREAD: Optional[threading.Thread] = None
 
 
+def _remove_path(path: str) -> None:
+    try:
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        elif os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
+
+
+def _choose_archive_root(extract_dir: str, plugin_name: str) -> str:
+    try:
+        entries = [
+            name
+            for name in os.listdir(extract_dir)
+            if name and name not in (".", "..", "__MACOSX")
+        ]
+    except Exception:
+        return extract_dir
+
+    preferred = os.path.join(extract_dir, plugin_name)
+    if os.path.isdir(preferred):
+        return preferred
+    if len(entries) == 1:
+        only_path = os.path.join(extract_dir, entries[0])
+        if os.path.isdir(only_path):
+            return only_path
+    return extract_dir
+
+
+def _extract_update_replacing_plugin(update_zip: str) -> None:
+    plugin_dir = get_plugin_dir()
+    plugins_dir = os.path.dirname(plugin_dir)
+    plugin_name = os.path.basename(os.path.normpath(plugin_dir))
+    extract_dir = tempfile.mkdtemp(prefix="luatools_update_extract_")
+    staging_dir = os.path.join(plugins_dir, f"{plugin_name}.staging")
+    backup_dir = os.path.join(plugins_dir, f"{plugin_name}.backup")
+
+    try:
+        with zipfile.ZipFile(update_zip, "r") as archive:
+            archive.extractall(extract_dir)
+
+        source_dir = _choose_archive_root(extract_dir, plugin_name)
+        _remove_path(staging_dir)
+        shutil.copytree(source_dir, staging_dir)
+
+        _remove_path(backup_dir)
+        if os.path.exists(plugin_dir):
+            os.replace(plugin_dir, backup_dir)
+        os.replace(staging_dir, plugin_dir)
+        _remove_path(backup_dir)
+    except Exception:
+        if (not os.path.exists(plugin_dir)) and os.path.exists(backup_dir):
+            try:
+                os.replace(backup_dir, plugin_dir)
+            except Exception:
+                pass
+        raise
+    finally:
+        _remove_path(staging_dir)
+        _remove_path(extract_dir)
+
+
 def apply_pending_update_if_any() -> str:
     """Extract a pending update zip if present. Returns a message or empty string."""
     pending_zip = backend_path(UPDATE_PENDING_ZIP)
@@ -40,8 +105,7 @@ def apply_pending_update_if_any() -> str:
 
     try:
         logger.log(f"AutoUpdate: Applying pending update from {pending_zip}")
-        with zipfile.ZipFile(pending_zip, "r") as archive:
-            archive.extractall(get_plugin_dir())
+        _extract_update_replacing_plugin(pending_zip)
         try:
             os.remove(pending_zip)
         except Exception:
@@ -203,10 +267,9 @@ def check_for_update_once() -> str:
     if not _download_and_extract_update(zip_url, pending_zip):
         return ""
 
-                                    
+                                     
     try:
-        with zipfile.ZipFile(pending_zip, "r") as archive:
-            archive.extractall(get_plugin_dir())
+        _extract_update_replacing_plugin(pending_zip)
         try:
             os.remove(pending_zip)
         except Exception:
@@ -344,4 +407,3 @@ __all__ = [
     "restart_steam_internal",
     "start_auto_update_background_check",
 ]
-

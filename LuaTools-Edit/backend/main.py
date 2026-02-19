@@ -26,6 +26,7 @@ from downloads import (
     delete_luatools_for_app,
     dismiss_loaded_apps,
     get_add_status,
+    get_daily_add_usage,
     get_icon_data_url,
     get_installed_lua_scripts,
     has_luatools_for_app,
@@ -43,9 +44,10 @@ from fixes import (
     unfix_game,
 )
 from utils import ensure_temp_download_dir
+from utils import migrate_legacy_backend_layout
 from http_client import close_http_client, ensure_http_client
 from logger import logger as shared_logger
-from paths import get_plugin_dir, public_path
+from paths import get_plugin_dir
 from settings.manager import (
     apply_settings_changes,
     get_available_locales,
@@ -85,32 +87,51 @@ def _steam_ui_path() -> str:
 def _copy_webkit_files() -> None:
     plugin_dir = get_plugin_dir()
     steam_ui_path = _steam_ui_path()
+    if os.path.isdir(steam_ui_path):
+        try:
+            shutil.rmtree(steam_ui_path)
+        except Exception as exc:
+            logger.warn(f"Failed to clear LuaTools web UI directory {steam_ui_path}: {exc}")
     os.makedirs(steam_ui_path, exist_ok=True)
 
-    js_src = public_path(WEB_UI_JS_FILE)
-    js_dst = os.path.join(steam_ui_path, WEB_UI_JS_FILE)
-    logger.log(f"Copying LuaTools web UI from {js_src} to {js_dst}")
-    try:
-        shutil.copy(js_src, js_dst)
-    except Exception as exc:
-        logger.error(f"Failed to copy LuaTools web UI: {exc}")
+    public_dir = os.path.join(plugin_dir, "public")
+    if not os.path.isdir(public_dir):
+        logger.error(f"LuaTools public assets directory not found: {public_dir}")
+        return
 
-    icon_src = public_path(WEB_UI_ICON_FILE)
+    copied = 0
+    for root, _, files in os.walk(public_dir):
+        rel_path = os.path.relpath(root, public_dir)
+        target_dir = steam_ui_path if rel_path in (".", "") else os.path.join(steam_ui_path, rel_path)
+        os.makedirs(target_dir, exist_ok=True)
+        for filename in files:
+            src = os.path.join(root, filename)
+            dst = os.path.join(target_dir, filename)
+            try:
+                shutil.copy(src, dst)
+                copied += 1
+            except Exception as exc:
+                logger.error(f"Failed to copy LuaTools asset {src} -> {dst}: {exc}")
+
+    logger.log(f"Copied {copied} LuaTools web assets to {steam_ui_path}")
+
+    js_dst = os.path.join(steam_ui_path, WEB_UI_JS_FILE)
+    if not os.path.exists(js_dst):
+        logger.error(f"LuaTools entry script missing after copy: {js_dst}")
+
     icon_dst = os.path.join(steam_ui_path, WEB_UI_ICON_FILE)
-    if os.path.exists(icon_src):
-        try:
-            shutil.copy(icon_src, icon_dst)
-            logger.log(f"Copied LuaTools icon to {icon_dst}")
-        except Exception as exc:
-            logger.error(f"Failed to copy LuaTools icon: {exc}")
-    else:
-        logger.warn(f"LuaTools icon not found at {icon_src}")
+    if not os.path.exists(icon_dst):
+        logger.warn(f"LuaTools icon missing after copy: {icon_dst}")
 
 
 def _inject_webkit_files() -> None:
-    js_path = os.path.join(WEBKIT_DIR_NAME, WEB_UI_JS_FILE)
-    Millennium.add_browser_js(js_path)
-    logger.log(f"LuaTools injected web UI: {js_path}")
+    script_paths = [
+        os.path.join(WEBKIT_DIR_NAME, WEB_UI_JS_FILE),
+        os.path.join(WEBKIT_DIR_NAME, "modules", "luatools.app.js"),
+    ]
+    for script_path in script_paths:
+        Millennium.add_browser_js(script_path)
+        logger.log(f"LuaTools injected web UI: {script_path}")
 
 
 def InitApis(contentScriptQuery: str = "") -> str:
@@ -146,6 +167,10 @@ def StartAddViaLuaTools(appid: int, contentScriptQuery: str = "") -> str:
 
 def GetAddViaLuaToolsStatus(appid: int, contentScriptQuery: str = "") -> str:
     return get_add_status(appid)
+
+
+def GetDailyAddUsage(contentScriptQuery: str = "") -> str:
+    return get_daily_add_usage()
 
 
 def CancelAddViaLuaTools(appid: int, contentScriptQuery: str = "") -> str:
@@ -389,6 +414,19 @@ class Plugin:
         logger.log(f"bootstrapping LuaTools plugin, millennium {Millennium.version()}")
 
         try:
+            migration = migrate_legacy_backend_layout()
+            moved_files = migration.get("moved_files", 0)
+            removed_legacy_files = migration.get("removed_legacy_files", 0)
+            merged_dirs = migration.get("merged_dirs", 0)
+            if moved_files or removed_legacy_files or merged_dirs:
+                logger.log(
+                    "LuaTools: Backend layout cleanup applied "
+                    f"(moved_files={moved_files}, removed_legacy_files={removed_legacy_files}, merged_dirs={merged_dirs})"
+                )
+        except Exception as exc:
+            logger.warn(f"LuaTools: Backend layout cleanup failed: {exc}")
+
+        try:
             detect_steam_install_path()
         except Exception as exc:
             logger.warn(f"LuaTools: steam path detection failed: {exc}")
@@ -430,4 +468,3 @@ class Plugin:
 
 
 plugin = Plugin()
-

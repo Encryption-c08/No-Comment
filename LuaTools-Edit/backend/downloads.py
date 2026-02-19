@@ -43,6 +43,7 @@ DOWNLOAD_LOCK = threading.Lock()
 
                                       
 DAILY_ADD_LOCK = threading.Lock()
+DAILY_ADD_WINDOW_SECONDS = 24 * 60 * 60
 
                                                  
 APP_NAME_CACHE: Dict[int, str] = {}
@@ -85,20 +86,32 @@ def _daily_add_usage_path() -> str:
     return backend_path(DAILY_ADD_USAGE_FILE)
 
 
-def _today_key() -> str:
-    return datetime.date.today().isoformat()
-
-
 def _load_daily_add_usage() -> Dict[str, any]:
+    now = int(time.time())
+    window_start = now - DAILY_ADD_WINDOW_SECONDS
     data = read_json(_daily_add_usage_path())
-    if not isinstance(data, dict):
-        data = {}
-    today = _today_key()
-    date_value = data.get("date")
-    count_value = data.get("count")
-    if date_value != today or not isinstance(count_value, int):
-        return {"date": today, "count": 0}
-    return {"date": date_value, "count": count_value}
+    events: list[int] = []
+    if isinstance(data, dict):
+        raw_events = data.get("events")
+        if isinstance(raw_events, list):
+            for value in raw_events:
+                try:
+                    ts = int(value)
+                except Exception:
+                    continue
+                if ts > 0:
+                    events.append(ts)
+        else:
+            date_value = data.get("date")
+            count_value = data.get("count")
+            if isinstance(date_value, str) and isinstance(count_value, int) and count_value > 0:
+                try:
+                    if date_value == datetime.date.today().isoformat():
+                        events = [now] * count_value
+                except Exception:
+                    events = []
+    events = sorted(ts for ts in events if ts > window_start)
+    return {"events": events}
 
 
 def _save_daily_add_usage(data: Dict[str, any]) -> None:
@@ -108,33 +121,67 @@ def _save_daily_add_usage(data: Dict[str, any]) -> None:
         logger.warn(f"LuaTools: Failed to persist daily add usage: {exc}")
 
 
-def _consume_daily_add_slot() -> Dict[str, any]:
-    """Attempt to consume one daily add slot. Returns metadata."""
-    today = _today_key()
-    limit = int(DAILY_ADD_LIMIT)
-    reset_date = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+def _current_daily_add_usage() -> Dict[str, any]:
     with DAILY_ADD_LOCK:
         data = _load_daily_add_usage()
-        count = int(data.get("count", 0))
-        if data.get("date") != today:
-            count = 0
+        events = list(data.get("events", []))
+        _save_daily_add_usage({"events": events})
+    now = int(time.time())
+    limit = int(DAILY_ADD_LIMIT)
+    count = len(events)
+    remaining = max(0, limit - count)
+    reset_epoch = (events[0] + DAILY_ADD_WINDOW_SECONDS) if events else (now + DAILY_ADD_WINDOW_SECONDS)
+    reset_in_seconds = max(0, reset_epoch - now)
+    reset_iso = datetime.datetime.fromtimestamp(reset_epoch).isoformat(timespec="seconds")
+    return {
+        "count": count,
+        "limit": limit,
+        "remaining": remaining,
+        "window_seconds": DAILY_ADD_WINDOW_SECONDS,
+        "reset_epoch": reset_epoch,
+        "reset_in_seconds": reset_in_seconds,
+        "reset": reset_iso,
+    }
+
+
+def _consume_daily_add_slot() -> Dict[str, any]:
+    """Attempt to consume one rolling 24h add slot. Returns metadata."""
+    now = int(time.time())
+    limit = int(DAILY_ADD_LIMIT)
+    with DAILY_ADD_LOCK:
+        data = _load_daily_add_usage()
+        events = list(data.get("events", []))
+        count = len(events)
+        reset_epoch = (events[0] + DAILY_ADD_WINDOW_SECONDS) if events else (now + DAILY_ADD_WINDOW_SECONDS)
+        reset_in_seconds = max(0, reset_epoch - now)
+        reset_iso = datetime.datetime.fromtimestamp(reset_epoch).isoformat(timespec="seconds")
         if count >= limit:
             return {
                 "allowed": False,
                 "count": count,
                 "limit": limit,
                 "remaining": max(0, limit - count),
-                "reset": reset_date,
+                "window_seconds": DAILY_ADD_WINDOW_SECONDS,
+                "reset_epoch": reset_epoch,
+                "reset_in_seconds": reset_in_seconds,
+                "reset": reset_iso,
             }
-        count += 1
-        payload = {"date": today, "count": count}
+        events.append(now)
+        payload = {"events": events}
         _save_daily_add_usage(payload)
+        count = len(events)
+        reset_epoch = events[0] + DAILY_ADD_WINDOW_SECONDS
+        reset_in_seconds = max(0, reset_epoch - now)
+        reset_iso = datetime.datetime.fromtimestamp(reset_epoch).isoformat(timespec="seconds")
         return {
             "allowed": True,
             "count": count,
             "limit": limit,
             "remaining": max(0, limit - count),
-            "reset": reset_date,
+            "window_seconds": DAILY_ADD_WINDOW_SECONDS,
+            "reset_epoch": reset_epoch,
+            "reset_in_seconds": reset_in_seconds,
+            "reset": reset_iso,
         }
 
 
@@ -671,8 +718,8 @@ def start_add_via_luatools(appid: int) -> str:
     usage = _consume_daily_add_slot()
     if not usage.get("allowed"):
         limit = usage.get("limit", DAILY_ADD_LIMIT)
-        reset_date = usage.get("reset", _today_key())
-        message = f"Daily add limit reached ({limit} per day). Resets on {reset_date}."
+        reset_date = usage.get("reset", "")
+        message = f"Daily add limit reached ({limit} per 24h). Resets on {reset_date}."
         logger.warn(f"LuaTools: Daily add limit reached ({usage.get('count', 0)}/{limit})")
         _set_download_state(
             appid,
@@ -691,6 +738,16 @@ def start_add_via_luatools(appid: int) -> str:
     thread = threading.Thread(target=_download_zip_for_app, args=(appid,), daemon=True)
     thread.start()
     return json.dumps({"success": True})
+
+
+def get_daily_add_usage() -> str:
+    try:
+        usage = _current_daily_add_usage()
+        payload = {"success": True}
+        payload.update(usage)
+        return json.dumps(payload)
+    except Exception as exc:
+        return json.dumps({"success": False, "error": str(exc)})
 
 
 def get_add_status(appid: int) -> str:
@@ -843,7 +900,10 @@ def get_installed_lua_scripts() -> str:
 
                                                                                        
                         if not game_name:
-                            game_name = f"Unknown Game ({appid})"
+                            game_name = _fetch_app_name(appid)
+
+                        if not game_name:
+                            game_name = f"AppID {appid}"
 
                                         
                         file_path = os.path.join(target_dir, filename)
@@ -894,6 +954,7 @@ __all__ = [
     "dismiss_loaded_apps",
     "fetch_app_name",
     "get_add_status",
+    "get_daily_add_usage",
     "get_icon_data_url",
     "get_installed_lua_scripts",
     "has_luatools_for_app",
