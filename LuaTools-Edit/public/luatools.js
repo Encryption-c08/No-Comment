@@ -645,6 +645,7 @@
             createSectionLabel('menu.advancedLabel', 'Advanced');
             const restartBtn = createMenuButton('lt-settings-restart-steam', 'menu.restartSteam', 'Restart Steam', 'fa-power-off');
             const fetchApisBtn = createMenuButton('lt-settings-fetch-apis', 'menu.fetchFreeApis', 'Fetch Free APIs', 'fa-server');
+            const checkUpdatesBtn = createMenuButton('lt-settings-check-updates', 'menu.checkUpdates', 'Check for updates', 'fa-arrows-rotate');
 
             body.appendChild(container);
 
@@ -782,6 +783,38 @@
                             } catch(_) {}
                         });
                     } catch(_) {}
+                });
+            }
+
+            if (checkUpdatesBtn) {
+                checkUpdatesBtn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    try {
+                        Millennium.callServerMethod('luatools', 'CheckForUpdatesNow', { contentScriptQuery: '' }).then(function(res){
+                            try {
+                                const payload = typeof res === 'string' ? JSON.parse(res) : res;
+                                if (payload && payload.success) {
+                                    const message = payload.message || '';
+                                    if (message) {
+                                        ShowLuaToolsAlert('LuaTools', message);
+                                    } else {
+                                        ShowLuaToolsAlert('LuaTools', t('menu.updatesNone', 'No updates available.'));
+                                    }
+                                } else {
+                                    const errText = (payload && payload.error) ? String(payload.error) : t('menu.updatesCheckFailed', 'Update check failed.');
+                                    ShowLuaToolsAlert('LuaTools', errText);
+                                }
+                            } catch(err) {
+                                const msg = (err && err.message) ? err.message : t('menu.updatesCheckFailed', 'Update check failed.');
+                                ShowLuaToolsAlert('LuaTools', msg);
+                            }
+                        }).catch(function(err){
+                            const msg = (err && err.message) ? err.message : t('menu.updatesCheckFailed', 'Update check failed.');
+                            ShowLuaToolsAlert('LuaTools', msg);
+                        });
+                    } catch(err) {
+                        backendLog('LuaTools: Check updates error: ' + err);
+                    }
                 });
             }
 

@@ -14,7 +14,12 @@ from api_manifest import (
     get_init_apis_message as api_get_init_message,
     init_apis as api_init_apis,
 )
-from auto_update import restart_steam as auto_restart_steam
+from auto_update import (
+    apply_pending_update_if_any,
+    check_for_updates_now as auto_check_for_updates_now,
+    restart_steam as auto_restart_steam,
+    start_auto_update_background_check,
+)
 from config import WEBKIT_DIR_NAME, WEB_UI_ICON_FILE, WEB_UI_JS_FILE
 from downloads import (
     cancel_add_via_luatools,
@@ -121,7 +126,7 @@ def FetchFreeApisNow(contentScriptQuery: str = "") -> str:
 
 
 def CheckForUpdatesNow(contentScriptQuery: str = "") -> str:
-    return json.dumps({"success": False, "error": "Updates are disabled."})
+    return json.dumps(auto_check_for_updates_now())
 
 
 def RestartSteam(contentScriptQuery: str = "") -> str:
@@ -396,8 +401,20 @@ class Plugin:
         except Exception as exc:
             logger.warn(f"LuaTools: Applist initialization failed: {exc}")
 
+        try:
+            message = apply_pending_update_if_any()
+            if message:
+                logger.log(f"AutoUpdate: {message}")
+        except Exception as exc:
+            logger.warn(f"AutoUpdate: apply_pending_update_if_any failed: {exc}")
+
         _copy_webkit_files()
         _inject_webkit_files()
+
+        try:
+            start_auto_update_background_check()
+        except Exception as exc:
+            logger.warn(f"AutoUpdate: start_auto_update_background_check failed: {exc}")
 
         try:
             result = InitApis("boot")
