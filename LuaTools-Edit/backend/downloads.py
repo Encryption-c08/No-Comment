@@ -7,6 +7,7 @@ import datetime
 import json
 import os
 import re
+import shutil
 import threading
 import time
 from typing import Dict
@@ -53,6 +54,9 @@ APP_NAME_CACHE_LOCK = threading.Lock()
 LAST_API_CALL_TIME = 0
 API_CALL_MIN_INTERVAL = 0.3                                           
 
+                                           
+DAILY_ADD_USAGE_PATH: str = ""
+
                                                 
 APPLIST_DATA: Dict[int, str] = {}
 APPLIST_LOADED = False
@@ -83,7 +87,41 @@ def _appid_log_path() -> str:
 
 
 def _daily_add_usage_path() -> str:
-    return backend_path(DAILY_ADD_USAGE_FILE)
+    global DAILY_ADD_USAGE_PATH
+    if DAILY_ADD_USAGE_PATH:
+        return DAILY_ADD_USAGE_PATH
+
+    legacy_path = backend_path(DAILY_ADD_USAGE_FILE)
+    steam_path = detect_steam_install_path()
+
+    candidates = []
+    if steam_path:
+        candidates.append(os.path.join(steam_path, "config", "LuaTools", "daily_add_limit.json"))
+
+    local_appdata = os.environ.get("LOCALAPPDATA", "").strip()
+    if local_appdata:
+        candidates.append(os.path.join(local_appdata, "LuaTools", "daily_add_limit.json"))
+
+    candidates.append(legacy_path)
+
+    preferred_path = legacy_path
+    for candidate in candidates:
+        try:
+            os.makedirs(os.path.dirname(candidate), exist_ok=True)
+            preferred_path = candidate
+            break
+        except Exception:
+            continue
+
+    try:
+        if os.path.exists(legacy_path) and not os.path.exists(preferred_path):
+            shutil.copy2(legacy_path, preferred_path)
+            logger.log(f"LuaTools: Migrated daily add usage file to {preferred_path}")
+    except Exception as exc:
+        logger.warn(f"LuaTools: Failed to migrate daily usage file: {exc}")
+
+    DAILY_ADD_USAGE_PATH = preferred_path
+    return DAILY_ADD_USAGE_PATH
 
 
 def _load_daily_add_usage() -> Dict[str, any]:
