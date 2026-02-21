@@ -269,15 +269,43 @@
         }
     }
 
+    function isSteamStoreHost() {
+        const host = String(window.location.hostname || '').toLowerCase();
+        return host === 'store.steampowered.com';
+    }
+
+    function getStoreAppIdFromPath() {
+        if (!isSteamStoreHost()) return null;
+        const pathname = String(window.location.pathname || '');
+        const direct = pathname.match(/\/app\/(\d+)/i);
+        if (direct) return parseInt(direct[1], 10);
+        const agecheck = pathname.match(/\/agecheck\/app\/(\d+)/i);
+        if (agecheck) return parseInt(agecheck[1], 10);
+        return null;
+    }
+
+    function isStoreGamePage() {
+        return getStoreAppIdFromPath() !== null;
+    }
+
     function getCurrentAppId() {
-        const match = window.location.href.match(/\/app\/(\d+)/);
-        if (match) return parseInt(match[1], 10);
+        const appIdFromPath = getStoreAppIdFromPath();
+        if (typeof appIdFromPath === 'number' && !isNaN(appIdFromPath)) {
+            return appIdFromPath;
+        }
+        if (!isSteamStoreHost()) return null;
+        const pathname = String(window.location.pathname || '');
+        if (!/\/app\//i.test(pathname) && !/\/agecheck\/app\//i.test(pathname)) return null;
         const d = document.querySelector('[data-appid]');
-        if (d) return parseInt(d.getAttribute('data-appid'), 10);
+        if (d) {
+            const parsed = parseInt(d.getAttribute('data-appid'), 10);
+            if (!isNaN(parsed)) return parsed;
+        }
         return null;
     }
 
     function getBundlePageId() {
+        if (!isSteamStoreHost()) return null;
         const pathname = String(window.location.pathname || '');
         const direct = pathname.match(/\/bundle\/(\d+)/i);
         if (direct) return direct[1];
@@ -484,12 +512,31 @@
         if (section && !section.querySelector('.package_in_library_flag')) {
             const flag = document.createElement('div');
             flag.className = 'package_in_library_flag in_own_library';
+            flag.setAttribute('data-luatools', '1');
             flag.innerHTML = '<span class="icon">☰</span> <span>In library</span>';
             section.insertBefore(flag, section.firstChild);
         }
     }
 
+    function removeLuaToolsLibraryBanners() {
+        const banner = document.querySelector('#luatools-in-library-banner');
+        if (banner && banner.parentElement) {
+            banner.parentElement.removeChild(banner);
+        }
+        document.querySelectorAll('.package_in_library_flag[data-luatools="1"]').forEach(function(flag) {
+            try { flag.remove(); } catch(_) {}
+        });
+    }
+
+    function clearStoreUiForNonStorePage() {
+        document.querySelectorAll('.luatools-store-button-container').forEach(function(btn) {
+            try { btn.remove(); } catch(_) {}
+        });
+        removeLuaToolsLibraryBanners();
+    }
+
     function showLibraryBanners() {
+        if (!isStoreGamePage()) return;
         if (document.querySelector('#luatools-in-library-banner')) return;
         const gameName = getGameName();
         const queue = document.querySelector('#queueActionsCtn');
@@ -500,6 +547,7 @@
     }
 
     function createStoreAddButton(appId) {
+        if (!isStoreGamePage()) return;
         if (document.querySelector('.luatools-store-button-container')) return;
         const container = getPurchaseContainer();
         if (!container) { return; }
@@ -710,6 +758,7 @@
     }
 
     function createStoreRemoveButton(appId) {
+        if (!isStoreGamePage()) return;
         if (document.querySelector('.luatools-store-button-container')) return;
         const container = getPurchaseContainer();
         if (!container) { return; }
@@ -746,8 +795,7 @@
                             try { payload = JSON.parse(res); } catch(_) { payload = null; }
                         }
                         if (payload && payload.success) {
-                            document.querySelector('#luatools-in-library-banner')?.remove();
-                            document.querySelectorAll('.package_in_library_flag').forEach(function(f){ f.remove(); });
+                            removeLuaToolsLibraryBanners();
                             const storeBtn = document.querySelector('.luatools-store-button-container');
                             if (storeBtn && storeBtn.parentElement) storeBtn.parentElement.removeChild(storeBtn);
                             createStoreAddButton(appId);
@@ -797,6 +845,13 @@
     let bundleStoreCheckInFlight = false;
     let bundleStoreCheckKey = '';
     async function ensureStoreAddButton() {
+        if (!isBundlePage() && !isStoreGamePage()) {
+            clearStoreUiForNonStorePage();
+            storeCheckInFlight = false;
+            storeCheckAppId = null;
+            return;
+        }
+
         const existing = document.querySelector('.luatools-store-button-container');
         if (isBundlePage()) {
             if (existing && !existing.classList.contains('luatools-store-bundle')) {
