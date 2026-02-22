@@ -343,13 +343,8 @@ def _start_initial_check_worker():
         message = check_for_update_once()
         if message:
             store_last_message(message)
-            logger.log(
-                f"AutoUpdate: Initial check found update: {message}. Auto-restarting Steam..."
-            )
-            time.sleep(2)
-            restart_steam_internal()
-        else:
-            _start_periodic_update_checks()
+            logger.log(f"AutoUpdate: Initial check found update: {message}")
+        _start_periodic_update_checks()
         
                                                             
         _check_and_donate_keys()
