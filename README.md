@@ -17,6 +17,12 @@
 - Notification System - No Comment adds a clean & smooth toast like system to notify the user of updates and much more.
 - Clickable Ui - With No Comment you'll be able to use a nice UI to manage your games or find new ones, this includes installing games previously delisted.
 
+## Requirements
+
+- Windows + Steam.
+- Millennium installed and active. ```https://github.com/SteamClientHomebrew/Millennium/releases/latest```
+- Steam Tools. ```https://www.steamtools.net/download```
+
 ## Installation
 
 - Inside steam, click the steam icon/text in the very top left
@@ -34,14 +40,6 @@
 - Vist any store page to check out the features No-Comment has!
 
 
-
-
-
-## Requirements
-
-- Windows + Steam.
-- Millennium installed and active. ```https://github.com/SteamClientHomebrew/Millennium/releases/latest```
-- Steam Tools. ```https://www.steamtools.net/download```
 
 ## Development Workflow
 
