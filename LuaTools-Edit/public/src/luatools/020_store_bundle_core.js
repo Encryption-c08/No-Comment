@@ -520,8 +520,8 @@
                 }
                 if (!/^\d+$/.test(appid)) continue;
                 const cls = String(row.className || '').toLowerCase();
-                const hasOwnedClass = cls.includes('owned') || cls.includes('in_library') || cls.includes('inlibrary');
-                const hasOwnedNode = !!row.querySelector('.ds_owned_flag, .in_library_flag, .game_area_dlc_owned, .owned');
+                const hasOwnedClass = (cls.includes('owned') || cls.includes('in_library') || cls.includes('inlibrary')) && row.getAttribute('data-luatools-ds-owned') !== '1';
+                const hasOwnedNode = !!row.querySelector('.ds_owned_flag:not([data-luatools-search-owned="1"]), .in_library_flag, .game_area_dlc_owned, .owned');
                 if (hasOwnedClass || hasOwnedNode) owned.add(appid);
             }
         } catch(_) {}
@@ -573,6 +573,57 @@
         return window.__LuaToolsInstalledLuaScriptsCache;
     }
 
+    const INSTALLED_LUA_IDS_SNAPSHOT_KEY = 'luatools.installedLuaIdsSnapshot.v1';
+    const INSTALLED_LUA_IDS_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+    function buildInstalledLuaIdSet(entries) {
+        const ids = new Set();
+        const source = Array.isArray(entries) ? entries : [];
+        for (let i = 0; i < source.length; i++) {
+            const entry = source[i] || {};
+            const appid = String(entry.appid || '').trim();
+            if (/^\d+$/.test(appid)) ids.add(appid);
+            const added = normalizeAppIdList(Array.isArray(entry.addedAppIds) ? entry.addedAppIds : []);
+            for (let j = 0; j < added.length; j++) {
+                ids.add(String(added[j]));
+            }
+        }
+        return ids;
+    }
+
+    function readInstalledLuaIdSnapshotSet() {
+        try {
+            const raw = localStorage.getItem(INSTALLED_LUA_IDS_SNAPSHOT_KEY);
+            if (!raw) return new Set();
+            const payload = JSON.parse(raw);
+            const ts = Number(payload && payload.ts ? payload.ts : 0);
+            if (!ts || (Date.now() - ts) > INSTALLED_LUA_IDS_SNAPSHOT_MAX_AGE_MS) {
+                return new Set();
+            }
+            const ids = normalizeAppIdList(Array.isArray(payload && payload.ids) ? payload.ids : []);
+            return new Set(ids.map(function(v){ return String(v); }));
+        } catch(_) {
+            return new Set();
+        }
+    }
+
+    function writeInstalledLuaIdSnapshotSet(idsSet) {
+        try {
+            const ids = Array.from(idsSet || [])
+                .map(function(v){ return String(v).trim(); })
+                .filter(function(v){ return /^\d+$/.test(v); })
+                .slice(0, 5000);
+            localStorage.setItem(INSTALLED_LUA_IDS_SNAPSHOT_KEY, JSON.stringify({
+                ts: Date.now(),
+                ids: ids
+            }));
+        } catch(_) {}
+    }
+
+    function writeInstalledLuaIdSnapshotEntries(entries) {
+        writeInstalledLuaIdSnapshotSet(buildInstalledLuaIdSet(entries));
+    }
+
     function cloneInstalledLuaEntries(entries) {
         const source = Array.isArray(entries) ? entries : [];
         return source.map(function(entry) {
@@ -586,7 +637,8 @@
     }
 
     function invalidateInstalledLuaScriptsCache() {
-        window.__LuaToolsInstalledLuaScriptsCache = { fetchedAt: 0, entries: [] };
+        const cache = getInstalledLuaScriptsCache();
+        cache.fetchedAt = 0;
     }
 
     async function getInstalledLuaScriptEntries(forceRefresh) {
@@ -595,6 +647,7 @@
             const now = Date.now();
             const cacheTtlMs = 15000;
             if (!forceRefresh && Array.isArray(cache.entries) && (now - Number(cache.fetchedAt || 0) < cacheTtlMs)) {
+                writeInstalledLuaIdSnapshotEntries(cache.entries);
                 return cloneInstalledLuaEntries(cache.entries);
             }
             if (typeof Millennium === 'undefined' || typeof Millennium.callServerMethod !== 'function') {
@@ -623,6 +676,7 @@
             const entries = Object.keys(map).map(function(id){ return map[id]; });
             cache.entries = cloneInstalledLuaEntries(entries);
             cache.fetchedAt = now;
+            writeInstalledLuaIdSnapshotEntries(cache.entries);
             return cloneInstalledLuaEntries(entries);
         } catch(_) {
             return [];
@@ -1872,6 +1926,193 @@
         });
     }
 
+    let storeSearchFlagSyncTimer = null;
+    let storeSearchFlagSyncInFlight = false;
+    let storeSearchFlagSyncQueued = false;
+
+    function isStoreSearchListingPage() {
+        if (!isSteamStoreHost()) return false;
+        const path = String(window.location && window.location.pathname ? window.location.pathname : '');
+        if (/^\/search(\/|$)/i.test(path)) return true;
+        if (document.body && document.body.classList && document.body.classList.contains('search_page')) return true;
+        return !!document.querySelector('#search_resultsRows .search_result_row, #search_resultsRows .tab_item');
+    }
+
+    function getStoreSearchRowAppId(row) {
+        if (!row) return '';
+        const raw = String(row.getAttribute('data-ds-appid') || row.getAttribute('data-appid') || '').split(',')[0].trim();
+        if (/^\d+$/.test(raw)) return raw;
+        const directHref = row.getAttribute('href');
+        const nestedHref = directHref ? '' : ((row.querySelector && row.querySelector('a[href*="/app/"]')) ? row.querySelector('a[href*="/app/"]').getAttribute('href') : '');
+        const extracted = extractAppIdFromHref(directHref || nestedHref || '');
+        return /^\d+$/.test(extracted) ? extracted : '';
+    }
+
+    function removeStoreSearchLuaToolsFlags() {
+        document.querySelectorAll('.ds_flag.ds_owned_flag[data-luatools-search-owned="1"]').forEach(function(flag) {
+            try { flag.remove(); } catch(_) {}
+        });
+
+        document.querySelectorAll('[data-luatools-ds-flagged="1"]').forEach(function(row) {
+            try {
+                const hasOtherFlags = !!row.querySelector('.ds_flag:not([data-luatools-search-owned="1"])');
+                if (!hasOtherFlags) {
+                    row.classList.remove('ds_flagged');
+                }
+                row.removeAttribute('data-luatools-ds-flagged');
+            } catch(_) {}
+        });
+
+        document.querySelectorAll('[data-luatools-ds-collapse-flag="1"]').forEach(function(row) {
+            try {
+                row.classList.remove('ds_collapse_flag');
+                row.removeAttribute('data-luatools-ds-collapse-flag');
+            } catch(_) {}
+        });
+
+        document.querySelectorAll('[data-luatools-ds-owned="1"]').forEach(function(row) {
+            try {
+                row.classList.remove('ds_owned');
+                row.removeAttribute('data-luatools-ds-owned');
+            } catch(_) {}
+        });
+    }
+
+    function applyLuaToolsStoreSearchFlagToRow(row, luatoolsAppIds) {
+        if (!row) return;
+        const appid = getStoreSearchRowAppId(row);
+        if (!/^\d+$/.test(appid)) return;
+
+        const shouldFlag = !!(luatoolsAppIds && luatoolsAppIds.has(appid));
+        const ownFlag = row.querySelector('.ds_flag.ds_owned_flag[data-luatools-search-owned="1"]');
+        const nativeOwnedFlag = row.querySelector('.ds_flag.ds_owned_flag:not([data-luatools-search-owned="1"])');
+
+        if (shouldFlag) {
+            if (!row.classList.contains('ds_flagged')) {
+                row.classList.add('ds_flagged');
+                row.setAttribute('data-luatools-ds-flagged', '1');
+            }
+            if (!row.classList.contains('ds_collapse_flag')) {
+                row.classList.add('ds_collapse_flag');
+                row.setAttribute('data-luatools-ds-collapse-flag', '1');
+            }
+            if (nativeOwnedFlag) {
+                if (ownFlag) {
+                    try { ownFlag.remove(); } catch(_) {}
+                }
+                if (row.getAttribute('data-luatools-ds-owned') === '1') {
+                    row.classList.remove('ds_owned');
+                    row.removeAttribute('data-luatools-ds-owned');
+                }
+                return;
+            }
+            if (!row.classList.contains('ds_owned')) {
+                row.classList.add('ds_owned');
+                row.setAttribute('data-luatools-ds-owned', '1');
+            }
+            if (!ownFlag) {
+                const flag = document.createElement('div');
+                flag.className = 'ds_flag ds_owned_flag';
+                flag.setAttribute('data-luatools-search-owned', '1');
+                flag.innerHTML = 'IN LIBRARY&nbsp;&nbsp;';
+                row.appendChild(flag);
+            }
+            return;
+        }
+
+        if (ownFlag) {
+            try { ownFlag.remove(); } catch(_) {}
+        }
+        if (row.getAttribute('data-luatools-ds-flagged') === '1') {
+            const hasOtherFlags = !!row.querySelector('.ds_flag:not([data-luatools-search-owned="1"])');
+            if (!hasOtherFlags) {
+                row.classList.remove('ds_flagged');
+            }
+            row.removeAttribute('data-luatools-ds-flagged');
+        }
+        if (row.getAttribute('data-luatools-ds-collapse-flag') === '1') {
+            row.classList.remove('ds_collapse_flag');
+            row.removeAttribute('data-luatools-ds-collapse-flag');
+        }
+        if (row.getAttribute('data-luatools-ds-owned') === '1') {
+            row.classList.remove('ds_owned');
+            row.removeAttribute('data-luatools-ds-owned');
+        }
+    }
+
+    function applyLuaToolsStoreSearchFlagsToRows(rows, luatoolsAppIds) {
+        const list = rows ? Array.from(rows) : [];
+        for (let r = 0; r < list.length; r++) {
+            applyLuaToolsStoreSearchFlagToRow(list[r], luatoolsAppIds);
+        }
+    }
+
+    function areStringSetsEqual(a, b) {
+        const aSet = a instanceof Set ? a : new Set();
+        const bSet = b instanceof Set ? b : new Set();
+        if (aSet.size !== bSet.size) return false;
+        for (const value of aSet) {
+            if (!bSet.has(value)) return false;
+        }
+        return true;
+    }
+
+    async function syncLuaToolsStoreSearchFlags() {
+        if (!isStoreSearchListingPage()) {
+            removeStoreSearchLuaToolsFlags();
+            return;
+        }
+
+        const rows = document.querySelectorAll('#search_resultsRows .search_result_row, #search_resultsRows .tab_item');
+        if (!rows.length) {
+            removeStoreSearchLuaToolsFlags();
+            return;
+        }
+
+        let quickIds = new Set();
+        const cache = getInstalledLuaScriptsCache();
+        if (Array.isArray(cache.entries) && cache.entries.length) {
+            quickIds = buildInstalledLuaIdSet(cache.entries);
+        } else {
+            quickIds = readInstalledLuaIdSnapshotSet();
+        }
+        if (quickIds.size || document.querySelector('.ds_flag.ds_owned_flag[data-luatools-search-owned="1"]')) {
+            applyLuaToolsStoreSearchFlagsToRows(rows, quickIds);
+        }
+
+        const entries = await getInstalledLuaScriptEntries(false);
+        const ids = buildInstalledLuaIdSet(entries);
+        writeInstalledLuaIdSnapshotSet(ids);
+
+        if (!areStringSetsEqual(quickIds, ids)) {
+            applyLuaToolsStoreSearchFlagsToRows(rows, ids);
+        }
+    }
+
+    function scheduleLuaToolsStoreSearchFlagSync(delayMs) {
+        const delay = typeof delayMs === 'number' ? Math.max(0, Math.floor(delayMs)) : 120;
+        if (storeSearchFlagSyncTimer) {
+            clearTimeout(storeSearchFlagSyncTimer);
+        }
+        storeSearchFlagSyncTimer = setTimeout(function() {
+            storeSearchFlagSyncTimer = null;
+            if (storeSearchFlagSyncInFlight) {
+                storeSearchFlagSyncQueued = true;
+                return;
+            }
+            storeSearchFlagSyncInFlight = true;
+            syncLuaToolsStoreSearchFlags()
+                .catch(function(){})
+                .finally(function() {
+                    storeSearchFlagSyncInFlight = false;
+                    if (storeSearchFlagSyncQueued) {
+                        storeSearchFlagSyncQueued = false;
+                        scheduleLuaToolsStoreSearchFlagSync(0);
+                    }
+                });
+        }, delay);
+    }
+
     function clearStoreUiForNonStorePage() {
         document.querySelectorAll('.luatools-store-button-container, .luatools-store-dlc-button-container').forEach(function(btn) {
             try { btn.remove(); } catch(_) {}
@@ -2189,6 +2430,7 @@
     let bundleStoreCheckInFlight = false;
     let bundleStoreCheckKey = '';
     async function ensureStoreAddButton() {
+        scheduleLuaToolsStoreSearchFlagSync(0);
         if (!isBundlePage() && !isStoreGamePage()) {
             clearStoreUiForNonStorePage();
             storeCheckInFlight = false;
@@ -2289,6 +2531,14 @@
 
     
     ensureTranslationsLoaded(false);
+    if (isSteamStoreHost()) {
+        getInstalledLuaScriptEntries(false)
+            .then(function(entries) {
+                writeInstalledLuaIdSnapshotEntries(entries);
+                scheduleLuaToolsStoreSearchFlagSync(0);
+            })
+            .catch(function(){});
+    }
 
     let settingsMenuPending = false;
 
