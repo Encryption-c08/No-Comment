@@ -6626,6 +6626,19 @@
                         const payload = typeof res === 'string' ? JSON.parse(res) : res;
                         if (payload && payload.message) {
                             const msg = String(payload.message);
+                            let isDuplicateMessage = false;
+                            try {
+                                const key = 'NoComment.lastInitMessage';
+                                const previous = sessionStorage.getItem(key) || '';
+                                if (previous === msg) {
+                                    isDuplicateMessage = true;
+                                } else {
+                                    sessionStorage.setItem(key, msg);
+                                }
+                            } catch(_) {}
+                            if (isDuplicateMessage) {
+                                return;
+                            }
                             
                             const isUpdateMsg = msg.toLowerCase().includes('update') || msg.toLowerCase().includes('restart');
                             
@@ -6636,7 +6649,7 @@
                                     try { Millennium.callServerMethod('No-Comment', 'RestartSteam', { contentScriptQuery: '' }); } catch(_) {}
                                 }, function() {
                                     
-                                });
+                                }, { theme: 'grey' });
                             } else {
                                 
                                 showNoCommentNotification('No-Comment', msg, { timeoutMs: 3000 });

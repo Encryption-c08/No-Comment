@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from typing import Any, Dict, List
 
 from config import (
@@ -24,6 +25,7 @@ from utils import (
 
 _APIS_INIT_DONE = False
 _INIT_APIS_LAST_MESSAGE = ""
+_INIT_APIS_MESSAGE_LOCK = threading.Lock()
 
 
 def init_apis(content_script_query: str = "") -> str:
@@ -89,17 +91,19 @@ def get_init_apis_message(content_script_query: str = "") -> str:
     """Return and clear the last InitApis message."""
     global _INIT_APIS_LAST_MESSAGE
     logger.log("InitApis: GetInitApisMessage invoked")
-    msg = _INIT_APIS_LAST_MESSAGE or ""
-    if msg:
-        logger.log(f"InitApis: delivering queued message -> {msg}")
-    _INIT_APIS_LAST_MESSAGE = ""
+    with _INIT_APIS_MESSAGE_LOCK:
+        msg = _INIT_APIS_LAST_MESSAGE or ""
+        if msg:
+            logger.log(f"InitApis: delivering queued message -> {msg}")
+        _INIT_APIS_LAST_MESSAGE = ""
     return json.dumps({"success": True, "message": msg})
 
 
 def store_last_message(message: str) -> None:
     """Allow other subsystems to push a message shown on next InitApis poll."""
     global _INIT_APIS_LAST_MESSAGE
-    _INIT_APIS_LAST_MESSAGE = message or ""
+    with _INIT_APIS_MESSAGE_LOCK:
+        _INIT_APIS_LAST_MESSAGE = message or ""
 
 
 def fetch_free_apis_now(content_script_query: str = "") -> str:
@@ -168,4 +172,3 @@ def load_api_manifest() -> List[Dict[str, Any]]:
     except Exception as exc:
         logger.error(f"NoComment: Failed to parse api.json: {exc}")
         return []
-
