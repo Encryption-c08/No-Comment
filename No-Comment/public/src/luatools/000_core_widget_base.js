@@ -186,6 +186,79 @@
                 .NoComment-tools-launcher i {
                     font-size: 22px;
                 }
+                .NoComment-launcher-logo {
+                    display: inline-flex;
+                    width: 22px;
+                    height: 22px;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .NoComment-launcher-logo svg {
+                    width: 100%;
+                    height: 100%;
+                    display: block;
+                }
+                .NoComment-launcher-logo .NoComment-launcher-hex-outer {
+                    fill: none;
+                    stroke: currentColor;
+                    stroke-width: 1.85;
+                    opacity: 0.94;
+                    transform-origin: 12px 12px;
+                    animation: NoCommentHexSpin 3.2s linear infinite;
+                }
+                .NoComment-launcher-logo .NoComment-launcher-hex-inner {
+                    fill: none;
+                    stroke: currentColor;
+                    stroke-width: 1.55;
+                    opacity: 0.56;
+                    transform-origin: 12px 12px;
+                    animation: NoCommentHexSpinReverse 2.2s linear infinite;
+                }
+                .NoComment-launcher-logo .NoComment-launcher-core {
+                    fill: currentColor;
+                    opacity: 0.92;
+                }
+                .NoComment-tools-launcher:hover .NoComment-launcher-logo .NoComment-launcher-hex-outer {
+                    animation-duration: 2.4s;
+                }
+                .NoComment-tools-launcher:hover .NoComment-launcher-logo .NoComment-launcher-hex-inner {
+                    animation-duration: 1.7s;
+                }
+                .NoComment-inline-icon {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-width: 14px;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 1;
+                    color: currentColor;
+                    flex-shrink: 0;
+                }
+                .NoComment-inline-icon svg {
+                    width: 100%;
+                    height: 100%;
+                    display: block;
+                    stroke: currentColor;
+                    fill: none;
+                }
+                .NoComment-inline-icon i {
+                    font-size: 14px;
+                    line-height: 1;
+                }
+                .NoComment-tools-launcher .NoComment-inline-icon {
+                    width: 20px;
+                    height: 20px;
+                    min-width: 20px;
+                }
+                .NoComment-tools-launcher .NoComment-inline-icon i {
+                    font-size: 18px;
+                }
+                .NoComment-tools-icon-btn .NoComment-inline-icon {
+                    width: 16px;
+                    height: 16px;
+                    min-width: 16px;
+                }
                 .NoComment-tools-panel {
                     position: fixed;
                     left: 24px;
@@ -461,6 +534,14 @@
                     60% { transform: scale(1.12); }
                     100% { transform: scale(1); }
                 }
+                @keyframes NoCommentHexSpin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                @keyframes NoCommentHexSpinReverse {
+                    from { transform: rotate(360deg); }
+                    to { transform: rotate(0deg); }
+                }
                 @keyframes NoCommentToastIn {
                     from { opacity: 0; transform: translateX(20px) scale(0.98); }
                     to { opacity: 1; transform: translateX(0) scale(1); }
@@ -486,6 +567,186 @@
             link.referrerPolicy = 'no-referrer';
             document.head.appendChild(link);
         } catch(err) { backendLog('NoComment: Font Awesome injection failed: ' + err); }
+    }
+
+    function _setNoCommentSvgAttrs(node, attrs) {
+        if (!node || !attrs || typeof attrs !== 'object') return;
+        const keys = Object.keys(attrs);
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
+            node.setAttribute(key, String(attrs[key]));
+        }
+    }
+
+    function _appendNoCommentSvgNode(svg, tag, attrs) {
+        const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        _setNoCommentSvgAttrs(node, attrs || {});
+        svg.appendChild(node);
+        return node;
+    }
+
+    function createNoCommentIconSvg(iconClass) {
+        const raw = String(iconClass || '').toLowerCase();
+        if (!raw) return null;
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        _setNoCommentSvgAttrs(svg, {
+            viewBox: '0 0 24 24',
+            'aria-hidden': 'true',
+            focusable: 'false',
+            fill: 'none',
+            stroke: 'currentColor',
+            'stroke-width': '2',
+            'stroke-linecap': 'round',
+            'stroke-linejoin': 'round',
+        });
+
+        if (raw.includes('fa-xmark')) {
+            _appendNoCommentSvgNode(svg, 'line', { x1: '6', y1: '6', x2: '18', y2: '18' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '18', y1: '6', x2: '6', y2: '18' });
+            return svg;
+        }
+        if (raw.includes('fa-plus')) {
+            _appendNoCommentSvgNode(svg, 'line', { x1: '12', y1: '6', x2: '12', y2: '18' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '6', y1: '12', x2: '18', y2: '12' });
+            return svg;
+        }
+        if (raw.includes('fa-trash')) {
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M5 8h14' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M9 8V6.4C9 5.6 9.6 5 10.4 5h3.2C14.4 5 15 5.6 15 6.4V8' });
+            _appendNoCommentSvgNode(svg, 'rect', { x: '7', y: '8', width: '10', height: '11', rx: '1.6' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '10', y1: '11', x2: '10', y2: '16' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '14', y1: '11', x2: '14', y2: '16' });
+            return svg;
+        }
+        if (raw.includes('fa-wrench')) {
+            _appendNoCommentSvgNode(svg, 'path', {
+                d: 'M13.2 6.2a2.8 2.8 0 0 0 3.9 3.9l-6.7 6.7a2.2 2.2 0 1 1-3.1-3.1l6.7-6.7z'
+            });
+            _appendNoCommentSvgNode(svg, 'circle', {
+                cx: '7.3',
+                cy: '16.7',
+                r: '0.9',
+                fill: 'currentColor',
+                stroke: 'none'
+            });
+            return svg;
+        }
+        if (raw.includes('fa-power-off')) {
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M12 4v7' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M7.3 6.8a6.8 6.8 0 1 0 9.4 0' });
+            return svg;
+        }
+        if (raw.includes('fa-server')) {
+            _appendNoCommentSvgNode(svg, 'rect', { x: '4.5', y: '4', width: '15', height: '6', rx: '1.5' });
+            _appendNoCommentSvgNode(svg, 'rect', { x: '4.5', y: '14', width: '15', height: '6', rx: '1.5' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '8', cy: '7', r: '0.9', fill: 'currentColor', stroke: 'none' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '8', cy: '17', r: '0.9', fill: 'currentColor', stroke: 'none' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '11', y1: '7', x2: '17', y2: '7' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '11', y1: '17', x2: '17', y2: '17' });
+            return svg;
+        }
+        if (raw.includes('fa-arrows-rotate') || raw.includes('fa-arrow-rotate-right')) {
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M20 11a8 8 0 0 0-13.7-5.3' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M6.3 2.8H2.8v3.5' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M4 13a8 8 0 0 0 13.7 5.3' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M17.7 21.2h3.5v-3.5' });
+            return svg;
+        }
+        if (raw.includes('fa-gear') || raw.includes('fa-cog')) {
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '12', cy: '12', r: '3.2' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '12', y1: '2.8', x2: '12', y2: '5' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '12', y1: '19', x2: '12', y2: '21.2' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '2.8', y1: '12', x2: '5', y2: '12' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '19', y1: '12', x2: '21.2', y2: '12' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '5.1', y1: '5.1', x2: '6.8', y2: '6.8' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '17.2', y1: '17.2', x2: '18.9', y2: '18.9' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '18.9', y1: '5.1', x2: '17.2', y2: '6.8' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '6.8', y1: '17.2', x2: '5.1', y2: '18.9' });
+            return svg;
+        }
+        if (raw.includes('fa-steam')) {
+            _setNoCommentSvgAttrs(svg, { 'stroke-width': '1.9' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '16.2', cy: '7.8', r: '3.3' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '16.2', cy: '7.8', r: '1.35', fill: 'currentColor', stroke: 'none' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '7.3', cy: '16.3', r: '2.35' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M9.1 15.2 13.9 10.5' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M13.9 10.5a3.35 3.35 0 0 1 2.3-1.05' });
+            return svg;
+        }
+        if (raw.includes('fa-arrow-left')) {
+            _appendNoCommentSvgNode(svg, 'line', { x1: '18', y1: '12', x2: '6', y2: '12' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M10.5 7.5 6 12l4.5 4.5' });
+            return svg;
+        }
+        if (raw.includes('fa-magnifying-glass')) {
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '10.5', cy: '10.5', r: '4.8' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '14', y1: '14', x2: '18.5', y2: '18.5' });
+            return svg;
+        }
+        if (raw.includes('fa-circle-info')) {
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '12', cy: '12', r: '8.8' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '12', y1: '10', x2: '12', y2: '15.5' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '12', cy: '7.3', r: '0.9', fill: 'currentColor', stroke: 'none' });
+            return svg;
+        }
+
+        return null;
+    }
+
+    function resolveNoCommentIconFallback(iconClass) {
+        const raw = String(iconClass || '').toLowerCase();
+        if (!raw) return 'o';
+        if (raw.includes('fa-store')) return '[]';
+        if (raw.includes('fa-database')) return '0';
+        if (raw.includes('fa-folder')) return '#';
+        if (raw.includes('fa-discord')) return '*';
+        if (raw.includes('fa-floppy-disk')) return '=';
+        return 'o';
+    }
+
+    function createNoCommentIcon(iconClass, extraClassName) {
+        const el = document.createElement('span');
+        el.className = 'NoComment-inline-icon' + (extraClassName ? (' ' + extraClassName) : '');
+        el.setAttribute('aria-hidden', 'true');
+        const svgIcon = createNoCommentIconSvg(iconClass);
+        if (svgIcon) {
+            el.appendChild(svgIcon);
+        } else {
+            el.textContent = resolveNoCommentIconFallback(iconClass);
+        }
+        return el;
+    }
+
+    function createNoCommentLauncherLogo() {
+        const wrap = document.createElement('span');
+        wrap.className = 'NoComment-launcher-logo';
+        wrap.setAttribute('aria-hidden', 'true');
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        _setNoCommentSvgAttrs(svg, {
+            viewBox: '0 0 24 24',
+            focusable: 'false',
+            'aria-hidden': 'true',
+        });
+
+        _appendNoCommentSvgNode(svg, 'polygon', {
+            class: 'NoComment-launcher-hex-outer',
+            points: '12,2.6 19.6,7 19.6,17 12,21.4 4.4,17 4.4,7'
+        });
+        _appendNoCommentSvgNode(svg, 'polygon', {
+            class: 'NoComment-launcher-hex-inner',
+            points: '12,5.6 17.1,8.5 17.1,15.5 12,18.4 6.9,15.5 6.9,8.5'
+        });
+        _appendNoCommentSvgNode(svg, 'circle', {
+            class: 'NoComment-launcher-core',
+            cx: '12',
+            cy: '12',
+            r: '1.55'
+        });
+
+        wrap.appendChild(svg);
+        return wrap;
     }
 
     function clampValue(value, min, max) {
@@ -711,7 +972,8 @@
             launcher.className = 'NoComment-tools-launcher';
             launcher.setAttribute('aria-label', 'Tools');
             launcher.setAttribute('aria-expanded', 'false');
-            launcher.innerHTML = '<i class="fa-brands fa-steam" aria-hidden="true"></i>';
+            launcher.innerHTML = '';
+            launcher.appendChild(createNoCommentLauncherLogo());
             widget.appendChild(launcher);
         }
 

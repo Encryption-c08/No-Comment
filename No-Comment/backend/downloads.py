@@ -1735,7 +1735,8 @@ def _process_and_install_lua(
         names = archive.namelist()
 
         try:
-            depotcache_dir = os.path.join(base_path or "", "depotcache")
+            # Steam expects depot manifests under config\depotcache.
+            depotcache_dir = os.path.join(base_path or "", "config", "depotcache")
             os.makedirs(depotcache_dir, exist_ok=True)
             for name in names:
                 try:
@@ -2307,6 +2308,166 @@ def get_daily_add_usage() -> str:
         return json.dumps({"success": False, "error": str(exc)})
 
 
+def _resolve_cache_source_appid_for_target(target_appid: int) -> int:
+    entries = _get_cached_source_entries_for_app(
+        int(target_appid), preferred_source_appid=int(target_appid)
+    )
+    if entries:
+        try:
+            chosen = int(entries[0].get("sourceAppid") or 0)
+            if chosen > 0:
+                return chosen
+        except Exception:
+            pass
+
+    with APP_META_CACHE_LOCK:
+        cache = _load_app_meta_cache_locked()
+        sources = cache.get("sources", {})
+        by_appid = cache.get("byAppid", {})
+
+    if isinstance(sources, dict) and str(target_appid) in sources:
+        return int(target_appid)
+
+    raw = by_appid.get(str(target_appid), []) if isinstance(by_appid, dict) else []
+    if isinstance(raw, list):
+        for value in raw:
+            try:
+                parsed = int(value)
+            except Exception:
+                continue
+            if parsed > 0:
+                return parsed
+
+    return int(target_appid)
+
+
+def _clear_cached_source_metadata(source_appid: int) -> Tuple[int, bool]:
+    deleted_zip_count = 0
+    changed = False
+    zip_paths: List[str] = []
+
+    with APP_META_CACHE_LOCK:
+        cache = _load_app_meta_cache_locked()
+        sources = cache.get("sources", {})
+        if not isinstance(sources, dict):
+            sources = {}
+
+        record = sources.pop(str(source_appid), None)
+        if record is not None:
+            changed = True
+            zip_rel = str(record.get("zipPath") or "").strip() if isinstance(record, dict) else ""
+            if zip_rel:
+                zip_paths.append(backend_path(zip_rel))
+
+        cache["sources"] = sources
+        cache["byAppid"] = _rebuild_app_meta_index(sources)
+        if changed:
+            _save_app_meta_cache_locked(cache)
+
+    zip_paths.append(_meta_cache_zip_abs_path(source_appid))
+
+    seen_paths: set[str] = set()
+    for candidate in zip_paths:
+        normalized = os.path.normpath(str(candidate or ""))
+        if not normalized or normalized in seen_paths:
+            continue
+        seen_paths.add(normalized)
+        if not os.path.exists(normalized):
+            continue
+        try:
+            os.remove(normalized)
+            deleted_zip_count += 1
+        except Exception as exc:
+            logger.warn(
+                "NoComment: Failed to remove cached zip for source appid="
+                f"{source_appid} path={normalized}: {exc}"
+            )
+
+    return deleted_zip_count, changed
+
+
+def clear_game_cache_and_refetch(appid: int) -> str:
+    try:
+        appid = int(appid)
+    except Exception:
+        return json.dumps({"success": False, "error": "Invalid appid"})
+
+    if appid <= 0:
+        return json.dumps({"success": False, "error": "Invalid appid"})
+
+    try:
+        current_state = _get_download_state(appid)
+        active_statuses = {"queued", "checking", "downloading", "processing"}
+        if str(current_state.get("status") or "").lower() in active_statuses:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "Another operation is already in progress for this app",
+                }
+            )
+    except Exception:
+        pass
+
+    source_appid = _resolve_cache_source_appid_for_target(appid)
+    if source_appid <= 0:
+        source_appid = int(appid)
+
+    logger.log(
+        "NoComment: Manual cache refresh requested for appid="
+        f"{appid} using source_appid={source_appid}"
+    )
+
+    deleted_zip_count, removed_source_entry = _clear_cached_source_metadata(source_appid)
+
+    apis = load_api_manifest()
+    if not apis:
+        return json.dumps({"success": False, "error": "No APIs available"})
+
+    client = ensure_http_client("NoComment: manual cache refresh")
+    dest_root = ensure_temp_download_dir()
+    dest_path = os.path.join(dest_root, f"cache_refresh_{appid}_{source_appid}.zip")
+
+    ok = _attempt_download_and_install(
+        requested_appid=int(source_appid),
+        install_appid=int(appid),
+        client=client,
+        apis=apis,
+        dest_path=dest_path,
+        preferred_lua_appid=int(source_appid),
+        cache_source_appid=int(source_appid),
+        cache_only=True,
+        log_context=f" (manual cache refresh for appid {appid})",
+    )
+
+    if not ok:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "Failed to refetch cache from available APIs",
+                "appid": int(appid),
+                "sourceAppid": int(source_appid),
+                "deletedZipCount": int(deleted_zip_count),
+                "removedSourceEntry": bool(removed_source_entry),
+            }
+        )
+
+    message = f"Cache refreshed for appid {appid} (source {source_appid})."
+    logger.log(
+        "NoComment: Manual cache refresh complete for appid="
+        f"{appid} source={source_appid} deleted_zips={deleted_zip_count}"
+    )
+    return json.dumps(
+        {
+            "success": True,
+            "message": message,
+            "appid": int(appid),
+            "sourceAppid": int(source_appid),
+            "deletedZipCount": int(deleted_zip_count),
+            "removedSourceEntry": bool(removed_source_entry),
+        }
+    )
+
+
 def get_steamdb_related_entries(appid: int) -> str:
     try:
         appid = int(appid)
@@ -2640,6 +2801,7 @@ def get_installed_lua_scripts() -> str:
 
 __all__ = [
     "cancel_add_via_NoComment",
+    "clear_game_cache_and_refetch",
     "delete_NoComment_for_app",
     "dismiss_loaded_apps",
     "fetch_app_name",

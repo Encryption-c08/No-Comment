@@ -194,6 +194,79 @@
                 .NoComment-tools-launcher i {
                     font-size: 22px;
                 }
+                .NoComment-launcher-logo {
+                    display: inline-flex;
+                    width: 22px;
+                    height: 22px;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .NoComment-launcher-logo svg {
+                    width: 100%;
+                    height: 100%;
+                    display: block;
+                }
+                .NoComment-launcher-logo .NoComment-launcher-hex-outer {
+                    fill: none;
+                    stroke: currentColor;
+                    stroke-width: 1.85;
+                    opacity: 0.94;
+                    transform-origin: 12px 12px;
+                    animation: NoCommentHexSpin 3.2s linear infinite;
+                }
+                .NoComment-launcher-logo .NoComment-launcher-hex-inner {
+                    fill: none;
+                    stroke: currentColor;
+                    stroke-width: 1.55;
+                    opacity: 0.56;
+                    transform-origin: 12px 12px;
+                    animation: NoCommentHexSpinReverse 2.2s linear infinite;
+                }
+                .NoComment-launcher-logo .NoComment-launcher-core {
+                    fill: currentColor;
+                    opacity: 0.92;
+                }
+                .NoComment-tools-launcher:hover .NoComment-launcher-logo .NoComment-launcher-hex-outer {
+                    animation-duration: 2.4s;
+                }
+                .NoComment-tools-launcher:hover .NoComment-launcher-logo .NoComment-launcher-hex-inner {
+                    animation-duration: 1.7s;
+                }
+                .NoComment-inline-icon {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-width: 14px;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 1;
+                    color: currentColor;
+                    flex-shrink: 0;
+                }
+                .NoComment-inline-icon svg {
+                    width: 100%;
+                    height: 100%;
+                    display: block;
+                    stroke: currentColor;
+                    fill: none;
+                }
+                .NoComment-inline-icon i {
+                    font-size: 14px;
+                    line-height: 1;
+                }
+                .NoComment-tools-launcher .NoComment-inline-icon {
+                    width: 20px;
+                    height: 20px;
+                    min-width: 20px;
+                }
+                .NoComment-tools-launcher .NoComment-inline-icon i {
+                    font-size: 18px;
+                }
+                .NoComment-tools-icon-btn .NoComment-inline-icon {
+                    width: 16px;
+                    height: 16px;
+                    min-width: 16px;
+                }
                 .NoComment-tools-panel {
                     position: fixed;
                     left: 24px;
@@ -469,6 +542,14 @@
                     60% { transform: scale(1.12); }
                     100% { transform: scale(1); }
                 }
+                @keyframes NoCommentHexSpin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                @keyframes NoCommentHexSpinReverse {
+                    from { transform: rotate(360deg); }
+                    to { transform: rotate(0deg); }
+                }
                 @keyframes NoCommentToastIn {
                     from { opacity: 0; transform: translateX(20px) scale(0.98); }
                     to { opacity: 1; transform: translateX(0) scale(1); }
@@ -494,6 +575,186 @@
             link.referrerPolicy = 'no-referrer';
             document.head.appendChild(link);
         } catch(err) { backendLog('NoComment: Font Awesome injection failed: ' + err); }
+    }
+
+    function _setNoCommentSvgAttrs(node, attrs) {
+        if (!node || !attrs || typeof attrs !== 'object') return;
+        const keys = Object.keys(attrs);
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
+            node.setAttribute(key, String(attrs[key]));
+        }
+    }
+
+    function _appendNoCommentSvgNode(svg, tag, attrs) {
+        const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        _setNoCommentSvgAttrs(node, attrs || {});
+        svg.appendChild(node);
+        return node;
+    }
+
+    function createNoCommentIconSvg(iconClass) {
+        const raw = String(iconClass || '').toLowerCase();
+        if (!raw) return null;
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        _setNoCommentSvgAttrs(svg, {
+            viewBox: '0 0 24 24',
+            'aria-hidden': 'true',
+            focusable: 'false',
+            fill: 'none',
+            stroke: 'currentColor',
+            'stroke-width': '2',
+            'stroke-linecap': 'round',
+            'stroke-linejoin': 'round',
+        });
+
+        if (raw.includes('fa-xmark')) {
+            _appendNoCommentSvgNode(svg, 'line', { x1: '6', y1: '6', x2: '18', y2: '18' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '18', y1: '6', x2: '6', y2: '18' });
+            return svg;
+        }
+        if (raw.includes('fa-plus')) {
+            _appendNoCommentSvgNode(svg, 'line', { x1: '12', y1: '6', x2: '12', y2: '18' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '6', y1: '12', x2: '18', y2: '12' });
+            return svg;
+        }
+        if (raw.includes('fa-trash')) {
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M5 8h14' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M9 8V6.4C9 5.6 9.6 5 10.4 5h3.2C14.4 5 15 5.6 15 6.4V8' });
+            _appendNoCommentSvgNode(svg, 'rect', { x: '7', y: '8', width: '10', height: '11', rx: '1.6' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '10', y1: '11', x2: '10', y2: '16' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '14', y1: '11', x2: '14', y2: '16' });
+            return svg;
+        }
+        if (raw.includes('fa-wrench')) {
+            _appendNoCommentSvgNode(svg, 'path', {
+                d: 'M13.2 6.2a2.8 2.8 0 0 0 3.9 3.9l-6.7 6.7a2.2 2.2 0 1 1-3.1-3.1l6.7-6.7z'
+            });
+            _appendNoCommentSvgNode(svg, 'circle', {
+                cx: '7.3',
+                cy: '16.7',
+                r: '0.9',
+                fill: 'currentColor',
+                stroke: 'none'
+            });
+            return svg;
+        }
+        if (raw.includes('fa-power-off')) {
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M12 4v7' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M7.3 6.8a6.8 6.8 0 1 0 9.4 0' });
+            return svg;
+        }
+        if (raw.includes('fa-server')) {
+            _appendNoCommentSvgNode(svg, 'rect', { x: '4.5', y: '4', width: '15', height: '6', rx: '1.5' });
+            _appendNoCommentSvgNode(svg, 'rect', { x: '4.5', y: '14', width: '15', height: '6', rx: '1.5' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '8', cy: '7', r: '0.9', fill: 'currentColor', stroke: 'none' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '8', cy: '17', r: '0.9', fill: 'currentColor', stroke: 'none' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '11', y1: '7', x2: '17', y2: '7' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '11', y1: '17', x2: '17', y2: '17' });
+            return svg;
+        }
+        if (raw.includes('fa-arrows-rotate') || raw.includes('fa-arrow-rotate-right')) {
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M20 11a8 8 0 0 0-13.7-5.3' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M6.3 2.8H2.8v3.5' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M4 13a8 8 0 0 0 13.7 5.3' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M17.7 21.2h3.5v-3.5' });
+            return svg;
+        }
+        if (raw.includes('fa-gear') || raw.includes('fa-cog')) {
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '12', cy: '12', r: '3.2' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '12', y1: '2.8', x2: '12', y2: '5' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '12', y1: '19', x2: '12', y2: '21.2' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '2.8', y1: '12', x2: '5', y2: '12' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '19', y1: '12', x2: '21.2', y2: '12' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '5.1', y1: '5.1', x2: '6.8', y2: '6.8' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '17.2', y1: '17.2', x2: '18.9', y2: '18.9' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '18.9', y1: '5.1', x2: '17.2', y2: '6.8' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '6.8', y1: '17.2', x2: '5.1', y2: '18.9' });
+            return svg;
+        }
+        if (raw.includes('fa-steam')) {
+            _setNoCommentSvgAttrs(svg, { 'stroke-width': '1.9' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '16.2', cy: '7.8', r: '3.3' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '16.2', cy: '7.8', r: '1.35', fill: 'currentColor', stroke: 'none' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '7.3', cy: '16.3', r: '2.35' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M9.1 15.2 13.9 10.5' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M13.9 10.5a3.35 3.35 0 0 1 2.3-1.05' });
+            return svg;
+        }
+        if (raw.includes('fa-arrow-left')) {
+            _appendNoCommentSvgNode(svg, 'line', { x1: '18', y1: '12', x2: '6', y2: '12' });
+            _appendNoCommentSvgNode(svg, 'path', { d: 'M10.5 7.5 6 12l4.5 4.5' });
+            return svg;
+        }
+        if (raw.includes('fa-magnifying-glass')) {
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '10.5', cy: '10.5', r: '4.8' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '14', y1: '14', x2: '18.5', y2: '18.5' });
+            return svg;
+        }
+        if (raw.includes('fa-circle-info')) {
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '12', cy: '12', r: '8.8' });
+            _appendNoCommentSvgNode(svg, 'line', { x1: '12', y1: '10', x2: '12', y2: '15.5' });
+            _appendNoCommentSvgNode(svg, 'circle', { cx: '12', cy: '7.3', r: '0.9', fill: 'currentColor', stroke: 'none' });
+            return svg;
+        }
+
+        return null;
+    }
+
+    function resolveNoCommentIconFallback(iconClass) {
+        const raw = String(iconClass || '').toLowerCase();
+        if (!raw) return 'o';
+        if (raw.includes('fa-store')) return '[]';
+        if (raw.includes('fa-database')) return '0';
+        if (raw.includes('fa-folder')) return '#';
+        if (raw.includes('fa-discord')) return '*';
+        if (raw.includes('fa-floppy-disk')) return '=';
+        return 'o';
+    }
+
+    function createNoCommentIcon(iconClass, extraClassName) {
+        const el = document.createElement('span');
+        el.className = 'NoComment-inline-icon' + (extraClassName ? (' ' + extraClassName) : '');
+        el.setAttribute('aria-hidden', 'true');
+        const svgIcon = createNoCommentIconSvg(iconClass);
+        if (svgIcon) {
+            el.appendChild(svgIcon);
+        } else {
+            el.textContent = resolveNoCommentIconFallback(iconClass);
+        }
+        return el;
+    }
+
+    function createNoCommentLauncherLogo() {
+        const wrap = document.createElement('span');
+        wrap.className = 'NoComment-launcher-logo';
+        wrap.setAttribute('aria-hidden', 'true');
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        _setNoCommentSvgAttrs(svg, {
+            viewBox: '0 0 24 24',
+            focusable: 'false',
+            'aria-hidden': 'true',
+        });
+
+        _appendNoCommentSvgNode(svg, 'polygon', {
+            class: 'NoComment-launcher-hex-outer',
+            points: '12,2.6 19.6,7 19.6,17 12,21.4 4.4,17 4.4,7'
+        });
+        _appendNoCommentSvgNode(svg, 'polygon', {
+            class: 'NoComment-launcher-hex-inner',
+            points: '12,5.6 17.1,8.5 17.1,15.5 12,18.4 6.9,15.5 6.9,8.5'
+        });
+        _appendNoCommentSvgNode(svg, 'circle', {
+            class: 'NoComment-launcher-core',
+            cx: '12',
+            cy: '12',
+            r: '1.55'
+        });
+
+        wrap.appendChild(svg);
+        return wrap;
     }
 
     function clampValue(value, min, max) {
@@ -719,7 +980,8 @@
             launcher.className = 'NoComment-tools-launcher';
             launcher.setAttribute('aria-label', 'Tools');
             launcher.setAttribute('aria-expanded', 'false');
-            launcher.innerHTML = '<i class="fa-brands fa-steam" aria-hidden="true"></i>';
+            launcher.innerHTML = '';
+            launcher.appendChild(createNoCommentLauncherLogo());
             widget.appendChild(launcher);
         }
 
@@ -857,7 +1119,11 @@
                 const label = t(titleKey, titleFallback);
                 btn.title = label;
                 btn.setAttribute('aria-label', label);
-                btn.innerHTML = '<i class="fa-solid ' + iconClass + '"></i>';
+                if (typeof createNoCommentIcon === 'function') {
+                    btn.appendChild(createNoCommentIcon('fa-solid ' + iconClass));
+                } else {
+                    btn.textContent = '*';
+                }
                 iconButtons.appendChild(btn);
                 return btn;
             }
@@ -897,8 +1163,19 @@
                 btn.type = 'button';
                 btn.id = id;
                 btn.className = 'NoComment-tools-action';
-                const iconHtml = iconClass ? '<i class="fa-solid ' + iconClass + '"></i>' : '';
-                btn.innerHTML = iconHtml + '<span>' + t(key, fallback) + '</span>';
+                if (iconClass) {
+                    if (typeof createNoCommentIcon === 'function') {
+                        btn.appendChild(createNoCommentIcon('fa-solid ' + iconClass));
+                    } else {
+                        const fallbackIcon = document.createElement('span');
+                        fallbackIcon.className = 'NoComment-inline-icon';
+                        fallbackIcon.textContent = '*';
+                        btn.appendChild(fallbackIcon);
+                    }
+                }
+                const textSpan = document.createElement('span');
+                textSpan.textContent = t(key, fallback);
+                btn.appendChild(textSpan);
                 container.appendChild(btn);
                 return btn;
             }
@@ -944,7 +1221,14 @@
 
             const addGameBtn = createMenuButton('lt-settings-add-game', 'Add via NoComment', 'Add via NoComment', 'fa-plus');
             const removeBtn = createMenuButton('lt-settings-remove-lua', 'menu.removeNoComment', 'Remove via NoComment', 'fa-trash-can');
+            const refreshCacheBtn = createMenuButton(
+                'lt-settings-refresh-cache',
+                'menu.refreshGameCache',
+                'Refresh game cache',
+                'fa-arrows-rotate'
+            );
             removeBtn.style.display = 'none';
+            refreshCacheBtn.style.display = 'none';
 
             function getSettingsMenuAppId() {
                 const current = getCurrentAppId();
@@ -1250,14 +1534,80 @@
                 });
             }
 
+            if (refreshCacheBtn) {
+                refreshCacheBtn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    if (refreshCacheBtn.getAttribute('data-busy') === '1') return;
+                    try {
+                        const appid = getSettingsMenuAppId();
+                        if (isNaN(appid)) {
+                            const errText = t('menu.error.noAppId', 'Could not determine game AppID');
+                            ShowNoCommentAlert('No-Comment', errText);
+                            return;
+                        }
+
+                        const labelNode = refreshCacheBtn.querySelector('span');
+                        const defaultLabel = labelNode
+                            ? labelNode.textContent
+                            : t('menu.refreshGameCache', 'Refresh game cache');
+                        refreshCacheBtn.setAttribute('data-busy', '1');
+                        refreshCacheBtn.style.opacity = '0.7';
+                        refreshCacheBtn.style.cursor = 'wait';
+                        if (labelNode) {
+                            labelNode.textContent = t('menu.refreshingCache', 'Refreshing cache...');
+                        }
+
+                        Millennium.callServerMethod(
+                            'No-Comment',
+                            'ClearGameCacheAndRefetch',
+                            { appid, contentScriptQuery: '' }
+                        ).then(function(res){
+                            try {
+                                const payload = typeof res === 'string' ? JSON.parse(res) : res;
+                                if (payload && payload.success) {
+                                    const okText = payload.message || t('menu.refreshCacheSuccess', 'Game cache refreshed.');
+                                    ShowNoCommentAlert('No-Comment', okText);
+                                } else {
+                                    const failText = (payload && payload.error)
+                                        ? String(payload.error)
+                                        : t('menu.refreshCacheFailure', 'Failed to refresh game cache.');
+                                    ShowNoCommentAlert('No-Comment', failText);
+                                }
+                            } catch(err) {
+                                const failText = (err && err.message)
+                                    ? err.message
+                                    : t('menu.refreshCacheFailure', 'Failed to refresh game cache.');
+                                ShowNoCommentAlert('No-Comment', failText);
+                            }
+                        }).catch(function(err){
+                            const failText = (err && err.message)
+                                ? err.message
+                                : t('menu.refreshCacheFailure', 'Failed to refresh game cache.');
+                            ShowNoCommentAlert('No-Comment', failText);
+                        }).finally(function(){
+                            refreshCacheBtn.setAttribute('data-busy', '0');
+                            refreshCacheBtn.style.opacity = '';
+                            refreshCacheBtn.style.cursor = '';
+                            if (labelNode) {
+                                labelNode.textContent = defaultLabel;
+                            }
+                        });
+                    } catch(err) {
+                        backendLog('NoComment: Refresh cache button error: ' + err);
+                    }
+                });
+            }
+
             try {
                 const appid = getSettingsMenuAppId();
                 if (isNaN(appid)) {
                     if (addGameBtn) addGameBtn.style.display = 'none';
                     removeBtn.style.display = 'none';
+                    refreshCacheBtn.style.display = 'none';
                 } else if (typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
                     if (addGameBtn) addGameBtn.style.display = 'flex';
                     removeBtn.style.display = 'none';
+                    refreshCacheBtn.style.display = 'flex';
                     Millennium.callServerMethod('No-Comment', 'HasNoCommentForApp', { appid, contentScriptQuery: '' }).then(function(res){
                         try {
                             const payload = typeof res === 'string' ? JSON.parse(res) : res;
@@ -1294,6 +1644,7 @@
 
                                 if (addGameBtn) addGameBtn.style.display = 'none';
                                 removeBtn.style.display = 'flex';
+                                refreshCacheBtn.style.display = 'flex';
                                 removeBtn.onclick = function(e){
                                     e.preventDefault();
                                     doDelete();
@@ -1301,16 +1652,19 @@
                             } else {
                                 removeBtn.style.display = 'none';
                                 if (addGameBtn) addGameBtn.style.display = 'flex';
+                                refreshCacheBtn.style.display = 'flex';
                             }
                         } catch(_) {}
                     });
                 } else {
                     if (addGameBtn) addGameBtn.style.display = 'flex';
                     removeBtn.style.display = 'none';
+                    refreshCacheBtn.style.display = 'flex';
                 }
             } catch(_) {
                 if (addGameBtn) addGameBtn.style.display = 'none';
                 removeBtn.style.display = 'none';
+                refreshCacheBtn.style.display = 'none';
             }
         });
     }
@@ -6467,7 +6821,7 @@
         if (!document.getElementById('NoComment-spacing-styles')) {
             const style = document.createElement('style');
             style.id = 'NoComment-spacing-styles';
-            style.textContent = '.NoComment-button{ margin-left:6px !important; }';
+            style.textContent = '.NoComment-button{ margin-left:6px !important; } .NoComment-copy-steamid-button{ margin-left:6px !important; }';
             document.head.appendChild(style);
         }
     }
@@ -6484,12 +6838,280 @@
                     span.textContent = addViaText;
                 }
             }
+            const copyBtn = document.querySelector('.NoComment-copy-steamid-button');
+            if (copyBtn) {
+                const copySteamIdText = t('profile.copySteamId', 'Copy SteamID');
+                copyBtn.title = copySteamIdText;
+                copyBtn.setAttribute('data-tooltip-text', copySteamIdText);
+                const copySpan = copyBtn.querySelector('span');
+                if (copySpan) {
+                    copySpan.textContent = copySteamIdText;
+                } else {
+                    copyBtn.textContent = copySteamIdText;
+                }
+            }
             if (typeof refreshStoreButtonTranslations === 'function') {
                 refreshStoreButtonTranslations();
             }
         } catch (err) {
             backendLog('NoComment: updateButtonTranslations error: ' + err);
         }
+    }
+
+    function isSteamCommunityProfilePage() {
+        try {
+            const host = String(window.location.hostname || '').toLowerCase();
+            if (host !== 'steamcommunity.com') return false;
+            const pathname = String(window.location.pathname || '');
+            return /^\/(id|profiles)\/[^\/?#]+/i.test(pathname);
+        } catch(_) {
+            return false;
+        }
+    }
+
+    function normalizeSteamId64(raw) {
+        const value = String(raw || '').trim();
+        if (/^\d{17}$/.test(value)) return value;
+        return '';
+    }
+
+    function extractSteamId64FromUrl(rawUrl) {
+        try {
+            const value = String(rawUrl || '');
+            const match = value.match(/(?:https?:\/\/)?steamcommunity\.com\/profiles\/(\d{17})(?:[/?#]|$)/i) ||
+                value.match(/\/profiles\/(\d{17})(?:[/?#]|$)/i);
+            return match ? normalizeSteamId64(match[1]) : '';
+        } catch(_) {
+            return '';
+        }
+    }
+
+    function accountIdToSteamId64(rawAccountId) {
+        try {
+            const value = String(rawAccountId || '').trim();
+            if (!/^\d+$/.test(value)) return '';
+            if (/^\d{17}$/.test(value)) return value;
+            if (typeof BigInt === 'undefined') return '';
+            const accountId = BigInt(value);
+            if (accountId <= 0n) return '';
+            const base = BigInt('76561197960265728');
+            return String(base + accountId);
+        } catch(_) {
+            return '';
+        }
+    }
+
+    function parseSteamId64FromXmlText(xmlText) {
+        try {
+            const text = String(xmlText || '');
+            const match = text.match(/<steamID64>\s*(\d{17})\s*<\/steamID64>/i);
+            return match ? normalizeSteamId64(match[1]) : '';
+        } catch(_) {
+            return '';
+        }
+    }
+
+    function fetchCurrentProfileSteamId64FromXml() {
+        try {
+            if (typeof fetch !== 'function') {
+                return Promise.resolve('');
+            }
+            const url = new URL(window.location.href);
+            url.searchParams.set('xml', '1');
+            return fetch(url.toString(), {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store'
+            }).then(function(resp) {
+                if (!resp || !resp.ok) return '';
+                return resp.text().then(function(text) {
+                    return parseSteamId64FromXmlText(text);
+                }).catch(function() {
+                    return '';
+                });
+            }).catch(function() {
+                return '';
+            });
+        } catch(_) {
+            return Promise.resolve('');
+        }
+    }
+
+    function resolveCurrentProfileSteamId64() {
+        try {
+            const pathMatch = String(window.location.pathname || '').match(/\/profiles\/(\d{17})(?:[/?#]|$)/i);
+            if (pathMatch && pathMatch[1]) {
+                const fromPath = normalizeSteamId64(pathMatch[1]);
+                if (fromPath) return fromPath;
+            }
+        } catch(_) {}
+
+        try {
+            const fromProfileData = normalizeSteamId64(window.g_rgProfileData && window.g_rgProfileData.steamid);
+            if (fromProfileData) return fromProfileData;
+        } catch(_) {}
+
+        try {
+            const scripts = document.querySelectorAll('script');
+            for (let i = 0; i < scripts.length; i++) {
+                const content = String((scripts[i] && scripts[i].textContent) || '');
+                if (!content || content.indexOf('g_rgProfileData') < 0) continue;
+                const match = content.match(/g_rgProfileData\s*=\s*\{[\s\S]*?"steamid"\s*:\s*"(\d{17})"/i);
+                if (match && match[1]) {
+                    const parsed = normalizeSteamId64(match[1]);
+                    if (parsed) return parsed;
+                }
+            }
+        } catch(_) {}
+
+        try {
+            const profileRoot =
+                document.querySelector('.profile_page') ||
+                document.querySelector('.profile_content') ||
+                document.querySelector('.profile_header');
+            if (profileRoot) {
+                const scopedAnchors = profileRoot.querySelectorAll('a[href*="/profiles/"]');
+                for (let i = 0; i < scopedAnchors.length; i++) {
+                    const href = scopedAnchors[i] ? scopedAnchors[i].getAttribute('href') : '';
+                    const fromHref = extractSteamId64FromUrl(href);
+                    if (fromHref) return fromHref;
+                }
+
+                const scopedMiniNodes = profileRoot.querySelectorAll('[data-miniprofile]');
+                for (let i = 0; i < scopedMiniNodes.length; i++) {
+                    const miniValue = String(scopedMiniNodes[i].getAttribute('data-miniprofile') || '').trim();
+                    const fromMini = accountIdToSteamId64(miniValue);
+                    if (fromMini) return fromMini;
+                }
+            }
+        } catch(_) {}
+
+        try {
+            const canonical = document.querySelector('link[rel="canonical"]');
+            const fromCanonical = extractSteamId64FromUrl(canonical ? canonical.getAttribute('href') : '');
+            if (fromCanonical) return fromCanonical;
+        } catch(_) {}
+
+        try {
+            const ogUrl = document.querySelector('meta[property="og:url"]');
+            const fromOg = extractSteamId64FromUrl(ogUrl ? ogUrl.getAttribute('content') : '');
+            if (fromOg) return fromOg;
+        } catch(_) {}
+
+        return '';
+    }
+
+    function resolveCurrentProfileSteamId64Async() {
+        const fromPage = resolveCurrentProfileSteamId64();
+        if (fromPage) return Promise.resolve(fromPage);
+        return fetchCurrentProfileSteamId64FromXml().then(function(fromXml) {
+            return fromXml || '';
+        }).catch(function() {
+            return '';
+        });
+    }
+
+    function copyTextLegacy(text) {
+        try {
+            const area = document.createElement('textarea');
+            area.value = String(text || '');
+            area.setAttribute('readonly', 'readonly');
+            area.style.position = 'fixed';
+            area.style.left = '-9999px';
+            area.style.top = '0';
+            document.body.appendChild(area);
+            area.focus();
+            area.select();
+            const copied = !!document.execCommand('copy');
+            document.body.removeChild(area);
+            return copied;
+        } catch(_) {
+            return false;
+        }
+    }
+
+    function copyTextToClipboard(text) {
+        const value = String(text || '');
+        if (!value) return Promise.resolve(false);
+        try {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                return navigator.clipboard.writeText(value).then(function() {
+                    return true;
+                }).catch(function() {
+                    return copyTextLegacy(value);
+                });
+            }
+        } catch(_) {}
+        return Promise.resolve(copyTextLegacy(value));
+    }
+
+    function addProfileSteamIdCopyButton() {
+        if (!isSteamCommunityProfilePage()) return;
+
+        const actionsContainer =
+            document.querySelector('.profile_header_actions') ||
+            document.querySelector('.profile_header .profile_header_actions') ||
+            document.querySelector('.profile_header_actions_logged_in');
+        if (!actionsContainer) return;
+
+        const existing = actionsContainer.querySelector('.NoComment-copy-steamid-button');
+        if (existing) {
+            updateButtonTranslations();
+            return;
+        }
+
+        ensureStyles();
+
+        const referenceBtn = actionsContainer.querySelector('a.btn_profile_action');
+        const button = document.createElement('a');
+        button.href = '#';
+        if (referenceBtn && referenceBtn.className) {
+            button.className = referenceBtn.className + ' NoComment-copy-steamid-button';
+        } else {
+            button.className = 'btn_profile_action btn_medium NoComment-copy-steamid-button';
+        }
+
+        const span = document.createElement('span');
+        const label = t('profile.copySteamId', 'Copy SteamID');
+        span.textContent = label;
+        button.appendChild(span);
+        button.title = label;
+        button.setAttribute('data-tooltip-text', label);
+
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            resolveCurrentProfileSteamId64Async().then(function(steamId64) {
+                if (!steamId64) {
+                    if (typeof ShowNoCommentAlert === 'function') {
+                        ShowNoCommentAlert('No-Comment', t('profile.copySteamIdNotFound', 'Could not resolve this profile SteamID.'));
+                    }
+                    return;
+                }
+
+                copyTextToClipboard(steamId64).then(function(copied) {
+                    if (typeof ShowNoCommentAlert !== 'function') return;
+                    if (!copied) {
+                        ShowNoCommentAlert('No-Comment', t('profile.copySteamIdCopyFailed', 'Unable to copy SteamID to clipboard.'));
+                        return;
+                    }
+                    const template = t('profile.copySteamIdSuccess', 'Copied SteamID: {steamid}');
+                    const msg = template.indexOf('{steamid}') >= 0
+                        ? template.replace('{steamid}', steamId64)
+                        : (template + ' ' + steamId64);
+                    ShowNoCommentAlert('No-Comment', msg);
+                }).catch(function() {
+                    if (typeof ShowNoCommentAlert === 'function') {
+                        ShowNoCommentAlert('No-Comment', t('profile.copySteamIdCopyFailed', 'Unable to copy SteamID to clipboard.'));
+                    }
+                });
+            }).catch(function() {
+                if (typeof ShowNoCommentAlert === 'function') {
+                    ShowNoCommentAlert('No-Comment', t('profile.copySteamIdNotFound', 'Could not resolve this profile SteamID.'));
+                }
+            });
+        });
+
+        actionsContainer.appendChild(button);
     }
 
     function addNoCommentButton() {
@@ -6509,6 +7131,11 @@
             ensureTranslationsLoaded(false).then(function() {
                 updateButtonTranslations();
             });
+        }
+
+        if (isSteamCommunityProfilePage()) {
+            addProfileSteamIdCopyButton();
+            return;
         }
 
         const steamdbContainer =

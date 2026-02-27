@@ -3,7 +3,7 @@
   "name": "No-Comment",
   "common_name": "No-Comment",
   "description": "No-Comment Steam Plugin!",
-  "version": "7.0.3",
+  "version": "7.0.4",
   "include": [
     "public"
   ]

@@ -25,6 +25,7 @@ from auto_update import (
 from config import WEBKIT_DIR_NAME, WEB_UI_ICON_FILE, WEB_UI_JS_FILE
 from downloads import (
     cancel_add_via_NoComment,
+    clear_game_cache_and_refetch,
     delete_NoComment_for_app,
     dismiss_loaded_apps,
     get_add_status,
@@ -187,6 +188,10 @@ def GetAddViaNoCommentStatus(appid: int, contentScriptQuery: str = "") -> str:
 
 def GetDailyAddUsage(contentScriptQuery: str = "") -> str:
     return get_daily_add_usage()
+
+
+def ClearGameCacheAndRefetch(appid: int, contentScriptQuery: str = "") -> str:
+    return clear_game_cache_and_refetch(appid)
 
 
 def CancelAddViaNoComment(appid: int, contentScriptQuery: str = "") -> str:

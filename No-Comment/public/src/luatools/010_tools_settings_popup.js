@@ -36,7 +36,11 @@
                 const label = t(titleKey, titleFallback);
                 btn.title = label;
                 btn.setAttribute('aria-label', label);
-                btn.innerHTML = '<i class="fa-solid ' + iconClass + '"></i>';
+                if (typeof createNoCommentIcon === 'function') {
+                    btn.appendChild(createNoCommentIcon('fa-solid ' + iconClass));
+                } else {
+                    btn.textContent = '*';
+                }
                 iconButtons.appendChild(btn);
                 return btn;
             }
@@ -76,8 +80,19 @@
                 btn.type = 'button';
                 btn.id = id;
                 btn.className = 'NoComment-tools-action';
-                const iconHtml = iconClass ? '<i class="fa-solid ' + iconClass + '"></i>' : '';
-                btn.innerHTML = iconHtml + '<span>' + t(key, fallback) + '</span>';
+                if (iconClass) {
+                    if (typeof createNoCommentIcon === 'function') {
+                        btn.appendChild(createNoCommentIcon('fa-solid ' + iconClass));
+                    } else {
+                        const fallbackIcon = document.createElement('span');
+                        fallbackIcon.className = 'NoComment-inline-icon';
+                        fallbackIcon.textContent = '*';
+                        btn.appendChild(fallbackIcon);
+                    }
+                }
+                const textSpan = document.createElement('span');
+                textSpan.textContent = t(key, fallback);
+                btn.appendChild(textSpan);
                 container.appendChild(btn);
                 return btn;
             }
@@ -123,7 +138,14 @@
 
             const addGameBtn = createMenuButton('lt-settings-add-game', 'Add via NoComment', 'Add via NoComment', 'fa-plus');
             const removeBtn = createMenuButton('lt-settings-remove-lua', 'menu.removeNoComment', 'Remove via NoComment', 'fa-trash-can');
+            const refreshCacheBtn = createMenuButton(
+                'lt-settings-refresh-cache',
+                'menu.refreshGameCache',
+                'Refresh game cache',
+                'fa-arrows-rotate'
+            );
             removeBtn.style.display = 'none';
+            refreshCacheBtn.style.display = 'none';
 
             function getSettingsMenuAppId() {
                 const current = getCurrentAppId();
@@ -429,14 +451,80 @@
                 });
             }
 
+            if (refreshCacheBtn) {
+                refreshCacheBtn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    if (refreshCacheBtn.getAttribute('data-busy') === '1') return;
+                    try {
+                        const appid = getSettingsMenuAppId();
+                        if (isNaN(appid)) {
+                            const errText = t('menu.error.noAppId', 'Could not determine game AppID');
+                            ShowNoCommentAlert('No-Comment', errText);
+                            return;
+                        }
+
+                        const labelNode = refreshCacheBtn.querySelector('span');
+                        const defaultLabel = labelNode
+                            ? labelNode.textContent
+                            : t('menu.refreshGameCache', 'Refresh game cache');
+                        refreshCacheBtn.setAttribute('data-busy', '1');
+                        refreshCacheBtn.style.opacity = '0.7';
+                        refreshCacheBtn.style.cursor = 'wait';
+                        if (labelNode) {
+                            labelNode.textContent = t('menu.refreshingCache', 'Refreshing cache...');
+                        }
+
+                        Millennium.callServerMethod(
+                            'No-Comment',
+                            'ClearGameCacheAndRefetch',
+                            { appid, contentScriptQuery: '' }
+                        ).then(function(res){
+                            try {
+                                const payload = typeof res === 'string' ? JSON.parse(res) : res;
+                                if (payload && payload.success) {
+                                    const okText = payload.message || t('menu.refreshCacheSuccess', 'Game cache refreshed.');
+                                    ShowNoCommentAlert('No-Comment', okText);
+                                } else {
+                                    const failText = (payload && payload.error)
+                                        ? String(payload.error)
+                                        : t('menu.refreshCacheFailure', 'Failed to refresh game cache.');
+                                    ShowNoCommentAlert('No-Comment', failText);
+                                }
+                            } catch(err) {
+                                const failText = (err && err.message)
+                                    ? err.message
+                                    : t('menu.refreshCacheFailure', 'Failed to refresh game cache.');
+                                ShowNoCommentAlert('No-Comment', failText);
+                            }
+                        }).catch(function(err){
+                            const failText = (err && err.message)
+                                ? err.message
+                                : t('menu.refreshCacheFailure', 'Failed to refresh game cache.');
+                            ShowNoCommentAlert('No-Comment', failText);
+                        }).finally(function(){
+                            refreshCacheBtn.setAttribute('data-busy', '0');
+                            refreshCacheBtn.style.opacity = '';
+                            refreshCacheBtn.style.cursor = '';
+                            if (labelNode) {
+                                labelNode.textContent = defaultLabel;
+                            }
+                        });
+                    } catch(err) {
+                        backendLog('NoComment: Refresh cache button error: ' + err);
+                    }
+                });
+            }
+
             try {
                 const appid = getSettingsMenuAppId();
                 if (isNaN(appid)) {
                     if (addGameBtn) addGameBtn.style.display = 'none';
                     removeBtn.style.display = 'none';
+                    refreshCacheBtn.style.display = 'none';
                 } else if (typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
                     if (addGameBtn) addGameBtn.style.display = 'flex';
                     removeBtn.style.display = 'none';
+                    refreshCacheBtn.style.display = 'flex';
                     Millennium.callServerMethod('No-Comment', 'HasNoCommentForApp', { appid, contentScriptQuery: '' }).then(function(res){
                         try {
                             const payload = typeof res === 'string' ? JSON.parse(res) : res;
@@ -473,6 +561,7 @@
 
                                 if (addGameBtn) addGameBtn.style.display = 'none';
                                 removeBtn.style.display = 'flex';
+                                refreshCacheBtn.style.display = 'flex';
                                 removeBtn.onclick = function(e){
                                     e.preventDefault();
                                     doDelete();
@@ -480,16 +569,19 @@
                             } else {
                                 removeBtn.style.display = 'none';
                                 if (addGameBtn) addGameBtn.style.display = 'flex';
+                                refreshCacheBtn.style.display = 'flex';
                             }
                         } catch(_) {}
                     });
                 } else {
                     if (addGameBtn) addGameBtn.style.display = 'flex';
                     removeBtn.style.display = 'none';
+                    refreshCacheBtn.style.display = 'flex';
                 }
             } catch(_) {
                 if (addGameBtn) addGameBtn.style.display = 'none';
                 removeBtn.style.display = 'none';
+                refreshCacheBtn.style.display = 'none';
             }
         });
     }
