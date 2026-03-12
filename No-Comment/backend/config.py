@@ -17,7 +17,7 @@ DEFAULT_HEADERS = {
 }
 
 API_MANIFEST_URL = "https://raw.githubusercontent.com/madoiscool/lt_api_links/refs/heads/main/load_free_manifest_apis"
-API_MANIFEST_PROXY_URL = "https://NoComment.vercel.app/load_free_manifest_apis"
+API_MANIFEST_PROXY_URL = "https://luatools.vercel.app/load_free_manifest_apis"
 RUNTIME_DATA_DIR = "data"
 
 API_JSON_FILE = os.path.join(RUNTIME_DATA_DIR, "api.json")
