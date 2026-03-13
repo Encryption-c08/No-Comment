@@ -131,6 +131,19 @@ def _clean_html_text(raw: str) -> str:
         return ""
 
 
+def _format_lua_comment_name(raw: str) -> str:
+    """Normalize a string for inline Lua comments."""
+    try:
+        text = str(raw or "").strip()
+    except Exception:
+        return ""
+    if not text:
+        return ""
+    text = text.replace("\r", " ").replace("\n", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
 def _parse_steamdb_related_entries(base_appid: int, html_text: str) -> List[Dict[str, Any]]:
     by_id: Dict[str, Dict[str, Any]] = {}
     for row in STEAMDB_ROW_RE.findall(html_text or ""):
@@ -218,6 +231,143 @@ def _extract_related_appids_from_lua_text(base_appid: int, lua_text: str) -> Lis
         seen.add(target_appid)
         related.append(target_appid)
     return related
+
+
+def _append_missing_steamdb_appids(appid: int, lua_text: str) -> Tuple[str, int]:
+    """Append missing SteamDB DLC addappid lines to lua text."""
+    try:
+        appid = int(appid)
+    except Exception:
+        return lua_text, 0
+    if appid <= 0:
+        return lua_text, 0
+
+    try:
+        existing_ids = set(_extract_related_appids_from_lua_text(-1, lua_text))
+    except Exception:
+        existing_ids = set()
+
+    steamdb_entries = _fetch_steamdb_related_entries_for_cache(appid)
+    if not steamdb_entries:
+        return lua_text, 0
+
+    missing_entries: List[Dict[str, Any]] = []
+    for entry in steamdb_entries:
+        try:
+            rel_id = int(entry.get("appid") or 0)
+        except Exception:
+            continue
+        if rel_id <= 0 or rel_id == appid or rel_id in existing_ids:
+            continue
+
+        raw_name = _format_lua_comment_name(entry.get("name"))
+        if not raw_name or raw_name.startswith("App "):
+            applist_name = _format_lua_comment_name(_get_app_name_from_applist(rel_id))
+            if applist_name:
+                raw_name = applist_name
+
+        missing_entries.append({"appid": rel_id, "name": raw_name})
+
+    if not missing_entries:
+        return lua_text, 0
+
+    lines = (lua_text or "").splitlines(True)
+    if lines and not lines[-1].endswith(("\n", "\r")):
+        lines.append("\n")
+    lines.append("-- Non-Encrypted DLC ID's (Added by NoComment)\n")
+    for entry in sorted(missing_entries, key=lambda item: int(item.get("appid", 0))):
+        rel_id = int(entry.get("appid", 0))
+        if rel_id <= 0:
+            continue
+        name = _format_lua_comment_name(entry.get("name"))
+        if name:
+            lines.append(f"addappid({rel_id}) -- {name}\n")
+        else:
+            lines.append(f"addappid({rel_id})\n")
+    return "".join(lines), len(missing_entries)
+
+
+def _build_merged_lua_from_zip(zip_path: str, source_appid: int) -> Optional[Tuple[str, str]]:
+    try:
+        source_appid = int(source_appid)
+    except Exception:
+        source_appid = 0
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            names = archive.namelist()
+            candidates: List[str] = []
+            for name in names:
+                pure = os.path.basename(name)
+                if re.fullmatch(r"\d+\.lua", pure):
+                    candidates.append(name)
+
+            if not candidates:
+                return None
+
+            preferred = f"{int(source_appid)}.lua" if source_appid > 0 else ""
+            ordered: List[str] = []
+            preferred_path = ""
+            for name in candidates:
+                if preferred and os.path.basename(name) == preferred:
+                    preferred_path = name
+                    ordered.append(name)
+                    break
+            for name in candidates:
+                if name not in ordered:
+                    ordered.append(name)
+            if not preferred_path:
+                preferred_path = ordered[0]
+
+            seen_lines: set[str] = set()
+            merged_lines: List[str] = []
+            for name in ordered:
+                data = archive.read(name)
+                try:
+                    text = data.decode("utf-8")
+                except Exception:
+                    text = data.decode("utf-8", errors="replace")
+                for line in text.splitlines(True):
+                    if line in seen_lines:
+                        continue
+                    seen_lines.add(line)
+                    merged_lines.append(line)
+
+            merged_text = "".join(merged_lines)
+            merged_text, added_count = _append_missing_steamdb_appids(source_appid, merged_text)
+            if added_count:
+                logger.log(
+                    "NoComment: Added missing SteamDB DLC appids to cached lua for appid="
+                    f"{source_appid} count={added_count}"
+                )
+            return preferred_path, merged_text
+    except Exception as exc:
+        logger.warn(f"NoComment: Failed to merge lua from zip {zip_path}: {exc}")
+        return None
+
+
+def _rewrite_zip_lua_entry(zip_path: str, lua_path: str, lua_text: str) -> None:
+    tmp_path = f"{zip_path}.tmp"
+    try:
+        with zipfile.ZipFile(zip_path, "r") as src:
+            with zipfile.ZipFile(tmp_path, "w") as dst:
+                wrote = False
+                for info in src.infolist():
+                    data = src.read(info.filename)
+                    if info.filename == lua_path:
+                        data = (lua_text or "").encode("utf-8")
+                        wrote = True
+                    dst.writestr(info, data)
+                if not wrote:
+                    dst.writestr(lua_path, (lua_text or "").encode("utf-8"), compress_type=zipfile.ZIP_DEFLATED)
+        os.replace(tmp_path, zip_path)
+    except Exception as exc:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+        logger.warn(f"NoComment: Failed to rewrite lua entry in zip {zip_path}: {exc}")
 
 
 def _extract_related_appids_from_content_bytes(base_appid: int, content_bytes: bytes) -> List[int]:
@@ -440,6 +590,13 @@ def _cache_download_metadata(source_appid: int, downloaded_zip_path: str, api_na
             f"NoComment: Failed to copy downloaded zip into metadata cache for appid={source_appid}: {exc}"
         )
         return
+    try:
+        merged = _build_merged_lua_from_zip(target_zip_path, source_appid)
+        if merged:
+            preferred_path, merged_text = merged
+            _rewrite_zip_lua_entry(target_zip_path, preferred_path, merged_text)
+    except Exception as exc:
+        logger.warn(f"NoComment: Failed to augment cached lua for appid={source_appid}: {exc}")
 
     record = {
         "sourceAppid": int(source_appid),
@@ -503,7 +660,7 @@ def _update_cached_source_steamdb_check_result(
         _save_app_meta_cache_locked(cache)
 
 
-def _fetch_steamdb_related_appids_for_cache(source_appid: int) -> Optional[List[int]]:
+def _fetch_steamdb_related_entries_for_cache(source_appid: int) -> Optional[List[Dict[str, Any]]]:
     try:
         source_appid = int(source_appid)
     except Exception:
@@ -523,14 +680,19 @@ def _fetch_steamdb_related_appids_for_cache(source_appid: int) -> Optional[List[
         resp = client.get(url, headers=headers, follow_redirects=True, timeout=20)
         if int(resp.status_code) != 200:
             return None
-        entries = _parse_steamdb_related_entries(source_appid, resp.text or "")
-        ids = _normalize_positive_int_list([item.get("appid") for item in entries])
-        return ids
+        return _parse_steamdb_related_entries(source_appid, resp.text or "")
     except Exception as exc:
         logger.warn(
             f"NoComment: SteamDB cache freshness check failed for source appid={source_appid}: {exc}"
         )
         return None
+
+
+def _fetch_steamdb_related_appids_for_cache(source_appid: int) -> Optional[List[int]]:
+    entries = _fetch_steamdb_related_entries_for_cache(source_appid)
+    if not entries:
+        return None
+    return _normalize_positive_int_list([item.get("appid") for item in entries])
 
 
 def _get_cached_source_missing_steamdb_appids(source_entry: Dict[str, Any]) -> List[int]:
@@ -786,6 +948,26 @@ def _install_all_content_on_add() -> bool:
     except Exception as exc:
         logger.warn(f"NoComment: Failed to read addViaNoComment.installAllContent setting: {exc}")
     return True
+
+
+def _normalize_api_name(value: Any) -> str:
+    try:
+        return str(value or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _filter_apis_for_source(apis: List[Dict[str, Any]], preferred_name: Optional[str]) -> List[Dict[str, Any]]:
+    if not apis:
+        return []
+    normalized = _normalize_api_name(preferred_name)
+    if not normalized:
+        return apis
+    matched: List[Dict[str, Any]] = []
+    for api in apis:
+        if _normalize_api_name(api.get("name")) == normalized:
+            matched.append(api)
+    return matched
 
 
 def _set_download_state(appid: int, update: dict) -> None:
@@ -1731,6 +1913,8 @@ def _process_and_install_lua(
         except Exception:
             continue
 
+    install_all_content = _install_all_content_on_add()
+
     with zipfile.ZipFile(zip_path, "r") as archive:
         names = archive.namelist()
 
@@ -1775,13 +1959,42 @@ def _process_and_install_lua(
         if not chosen:
             raise RuntimeError("No numeric .lua file found in zip")
 
-        data = archive.read(chosen)
-        try:
-            text = data.decode("utf-8")
-        except Exception:
-            text = data.decode("utf-8", errors="replace")
+        def _decode_lua_payload(payload: bytes) -> str:
+            try:
+                return payload.decode("utf-8")
+            except Exception:
+                return payload.decode("utf-8", errors="replace")
 
-        install_all_content = _install_all_content_on_add()
+        if install_all_content and not forced_keep_set and len(candidates) > 1:
+            lua_texts: Dict[str, str] = {}
+            for name in candidates:
+                lua_texts[name] = _decode_lua_payload(archive.read(name))
+
+            ordered_names: List[str] = []
+            for name in candidates:
+                if os.path.basename(name) == preferred:
+                    ordered_names.append(name)
+                    break
+            for name in candidates:
+                if name not in ordered_names:
+                    ordered_names.append(name)
+
+            seen_lines: set[str] = set()
+            merged_lines: List[str] = []
+            for name in ordered_names:
+                for line in (lua_texts.get(name) or "").splitlines(True):
+                    if line in seen_lines:
+                        continue
+                    seen_lines.add(line)
+                    merged_lines.append(line)
+            text = "".join(merged_lines)
+            logger.log(
+                "NoComment: Merged multiple lua files for appid="
+                f"{appid}; preferred={preferred} files={len(candidates)}"
+            )
+        else:
+            data = archive.read(chosen)
+            text = _decode_lua_payload(data)
         removed_related_lines = 0
         kept_base_lines = 0
         kept_depot_lines = 0
@@ -1860,6 +2073,13 @@ def _process_and_install_lua(
                 )
 
         processed_text = "".join(processed_lines)
+        if install_all_content and not forced_keep_set:
+            processed_text, added_count = _append_missing_steamdb_appids(appid, processed_text)
+            if added_count:
+                logger.log(
+                    "NoComment: Added missing SteamDB DLC appids for appid="
+                    f"{appid} count={added_count}"
+                )
 
         _set_download_state(appid, {"status": "installing"})
         dest_file = os.path.join(target_dir, f"{appid}.lua")
@@ -2097,13 +2317,28 @@ def _attempt_download_and_install(
     return False
 
 
-def _download_zip_for_app(appid: int, base_appid: Optional[int] = None, base_owned_on_steam: bool = False):
+def _download_zip_for_app(
+    appid: int,
+    base_appid: Optional[int] = None,
+    base_owned_on_steam: bool = False,
+    preferred_api_name: Optional[str] = None,
+):
     client = ensure_http_client("NoComment: download")
     apis = load_api_manifest()
     if not apis:
         logger.warn("NoComment: No enabled APIs in manifest")
         _set_download_state(appid, {"status": "failed", "error": "No APIs available"})
         return
+
+    use_cache = not _normalize_api_name(preferred_api_name)
+    if preferred_api_name:
+        filtered = _filter_apis_for_source(apis, preferred_api_name)
+        if not filtered:
+            message = f"Selected API not available: {preferred_api_name}"
+            logger.warn(f"NoComment: {message}")
+            _set_download_state(appid, {"status": "failed", "error": message})
+            return
+        apis = filtered
 
     dest_root = ensure_temp_download_dir()
     dest_path = os.path.join(dest_root, f"{appid}.zip")
@@ -2120,48 +2355,49 @@ def _download_zip_for_app(appid: int, base_appid: Optional[int] = None, base_own
     except Exception:
         preferred_base_appid = None
 
-    stale_cache = _find_stale_cached_source_for_app(
-        int(appid), preferred_source_appid=preferred_base_appid
-    )
-    if stale_cache:
-        stale_source_appid = int(stale_cache.get("sourceAppid") or 0)
-        missing_ids = _normalize_positive_int_list(stale_cache.get("missingAppIds"))
-        if stale_source_appid > 0:
-            preview = ", ".join(str(x) for x in missing_ids[:6]) if missing_ids else ""
-            if preview and len(missing_ids) > 6:
-                preview = preview + ", ..."
-            logger.log(
-                "NoComment: Cached metadata is stale for source appid="
-                f"{stale_source_appid}; SteamDB has {len(missing_ids)} newer item(s)"
-                + (f" ({preview})" if preview else "")
-                + ". Refreshing metadata from API before local install."
-            )
-            refreshed = _attempt_download_and_install(
-                requested_appid=int(stale_source_appid),
-                install_appid=int(appid),
-                client=client,
-                apis=apis,
-                dest_path=dest_path,
-                preferred_lua_appid=int(stale_source_appid),
-                cache_source_appid=int(stale_source_appid),
-                cache_only=True,
-                log_context=(
-                    f" (metadata refresh from stale local cache; delta={len(missing_ids)})"
-                ),
-            )
-            if refreshed:
+    if use_cache:
+        stale_cache = _find_stale_cached_source_for_app(
+            int(appid), preferred_source_appid=preferred_base_appid
+        )
+        if stale_cache:
+            stale_source_appid = int(stale_cache.get("sourceAppid") or 0)
+            missing_ids = _normalize_positive_int_list(stale_cache.get("missingAppIds"))
+            if stale_source_appid > 0:
+                preview = ", ".join(str(x) for x in missing_ids[:6]) if missing_ids else ""
+                if preview and len(missing_ids) > 6:
+                    preview = preview + ", ..."
                 logger.log(
-                    "NoComment: Metadata refresh succeeded for source appid="
-                    f"{stale_source_appid}; reusing updated local cache for appid={appid}"
+                    "NoComment: Cached metadata is stale for source appid="
+                    f"{stale_source_appid}; SteamDB has {len(missing_ids)} newer item(s)"
+                    + (f" ({preview})" if preview else "")
+                    + ". Refreshing metadata from API before local install."
                 )
-            else:
-                logger.warn(
-                    "NoComment: Metadata refresh failed for stale source appid="
-                    f"{stale_source_appid}; continuing with normal add flow for appid={appid}"
+                refreshed = _attempt_download_and_install(
+                    requested_appid=int(stale_source_appid),
+                    install_appid=int(appid),
+                    client=client,
+                    apis=apis,
+                    dest_path=dest_path,
+                    preferred_lua_appid=int(stale_source_appid),
+                    cache_source_appid=int(stale_source_appid),
+                    cache_only=True,
+                    log_context=(
+                        f" (metadata refresh from stale local cache; delta={len(missing_ids)})"
+                    ),
                 )
+                if refreshed:
+                    logger.log(
+                        "NoComment: Metadata refresh succeeded for source appid="
+                        f"{stale_source_appid}; reusing updated local cache for appid={appid}"
+                    )
+                else:
+                    logger.warn(
+                        "NoComment: Metadata refresh failed for stale source appid="
+                        f"{stale_source_appid}; continuing with normal add flow for appid={appid}"
+                    )
 
     # Fast path: reuse cached metadata first when available.
-    if _install_from_cached_metadata(appid, preferred_source_appid=preferred_base_appid):
+    if use_cache and _install_from_cached_metadata(appid, preferred_source_appid=preferred_base_appid):
         return
 
     # Primary path: install directly for requested appid.
@@ -2185,7 +2421,7 @@ def _download_zip_for_app(appid: int, base_appid: Optional[int] = None, base_own
 
     if fullgame_appid and int(fullgame_appid) > 0 and int(fullgame_appid) != int(appid):
         # Retry local metadata install with explicit base preference.
-        if _install_from_cached_metadata(appid, preferred_source_appid=int(fullgame_appid)):
+        if use_cache and _install_from_cached_metadata(appid, preferred_source_appid=int(fullgame_appid)):
             return
 
         logger.log(
@@ -2207,7 +2443,7 @@ def _download_zip_for_app(appid: int, base_appid: Optional[int] = None, base_own
 
         # If metadata still isn't available and user owns the base game, warm metadata
         # cache with a base download only (no install), then retry local install.
-        if bool(base_owned_on_steam) and not _has_cached_source_metadata(int(fullgame_appid)):
+        if use_cache and bool(base_owned_on_steam) and not _has_cached_source_metadata(int(fullgame_appid)):
             logger.log(
                 "NoComment: No local metadata for base appid="
                 f"{fullgame_appid}; warming cache from API before retrying appid={appid}"
@@ -2230,7 +2466,10 @@ def _download_zip_for_app(appid: int, base_appid: Optional[int] = None, base_own
 
 
 def start_add_via_NoComment(
-    appid: int, base_appid: Optional[int] = None, base_owned_on_steam: bool = False
+    appid: int,
+    base_appid: Optional[int] = None,
+    base_owned_on_steam: bool = False,
+    preferred_api_name: Optional[str] = None,
 ) -> str:
     try:
         appid = int(appid)
@@ -2240,6 +2479,7 @@ def start_add_via_NoComment(
     logger.log(
         "NoComment: StartAddViaNoComment appid="
         f"{appid} base_appid={base_appid} base_owned={bool(base_owned_on_steam)}"
+        f" preferred_api={preferred_api_name or ''}"
     )
     app_name, app_type = _fetch_app_identity(appid)
     resolved_name = app_name or f"App {appid}"
@@ -2291,7 +2531,7 @@ def start_add_via_NoComment(
 
     thread = threading.Thread(
         target=_download_zip_for_app,
-        args=(appid, normalized_base_appid, bool(base_owned_on_steam)),
+        args=(appid, normalized_base_appid, bool(base_owned_on_steam), preferred_api_name),
         daemon=True,
     )
     thread.start()
@@ -2413,47 +2653,15 @@ def clear_game_cache_and_refetch(appid: int) -> str:
         source_appid = int(appid)
 
     logger.log(
-        "NoComment: Manual cache refresh requested for appid="
+        "NoComment: Manual cache clear requested for appid="
         f"{appid} using source_appid={source_appid}"
     )
 
     deleted_zip_count, removed_source_entry = _clear_cached_source_metadata(source_appid)
 
-    apis = load_api_manifest()
-    if not apis:
-        return json.dumps({"success": False, "error": "No APIs available"})
-
-    client = ensure_http_client("NoComment: manual cache refresh")
-    dest_root = ensure_temp_download_dir()
-    dest_path = os.path.join(dest_root, f"cache_refresh_{appid}_{source_appid}.zip")
-
-    ok = _attempt_download_and_install(
-        requested_appid=int(source_appid),
-        install_appid=int(appid),
-        client=client,
-        apis=apis,
-        dest_path=dest_path,
-        preferred_lua_appid=int(source_appid),
-        cache_source_appid=int(source_appid),
-        cache_only=True,
-        log_context=f" (manual cache refresh for appid {appid})",
-    )
-
-    if not ok:
-        return json.dumps(
-            {
-                "success": False,
-                "error": "Failed to refetch cache from available APIs",
-                "appid": int(appid),
-                "sourceAppid": int(source_appid),
-                "deletedZipCount": int(deleted_zip_count),
-                "removedSourceEntry": bool(removed_source_entry),
-            }
-        )
-
-    message = f"Cache refreshed for appid {appid} (source {source_appid})."
+    message = f"Cache cleared for appid {appid} (source {source_appid})."
     logger.log(
-        "NoComment: Manual cache refresh complete for appid="
+        "NoComment: Manual cache clear complete for appid="
         f"{appid} source={source_appid} deleted_zips={deleted_zip_count}"
     )
     return json.dumps(
@@ -2610,6 +2818,26 @@ def get_api_related_entries(appid: int) -> str:
     if errors:
         err = err + " (" + "; ".join(errors[:3]) + ")"
     return json.dumps({"success": False, "error": err, "entries": []})
+
+
+def get_api_sources() -> str:
+    apis = load_api_manifest()
+    if not apis:
+        return json.dumps({"success": False, "error": "No APIs available", "sources": []})
+
+    sources: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for api in apis:
+        name = str(api.get("name") or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        sources.append({"name": name})
+
+    return json.dumps({"success": True, "sources": sources})
 
 
 def get_add_status(appid: int) -> str:

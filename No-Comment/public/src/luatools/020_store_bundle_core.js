@@ -260,6 +260,7 @@
 
         const opts = (options && typeof options === 'object') ? options : {};
         const shouldShowOverlay = opts.showOverlay !== false;
+        const preferredSource = (opts && typeof opts.sourceApi === 'string') ? opts.sourceApi : '';
 
         try {
             const dlcInfo = await getDlcBaseGameInfo(parsedAppId);
@@ -287,7 +288,11 @@
         window.__NoCommentCurrentAppId = parsedAppId;
 
         try {
-            Millennium.callServerMethod('No-Comment', 'StartAddViaNoComment', { appid: parsedAppId, contentScriptQuery: '' });
+            Millennium.callServerMethod('No-Comment', 'StartAddViaNoComment', {
+                appid: parsedAppId,
+                sourceApi: preferredSource,
+                contentScriptQuery: ''
+            });
             startPolling(parsedAppId);
             return true;
         } catch(err) {

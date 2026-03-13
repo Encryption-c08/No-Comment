@@ -29,6 +29,7 @@ from downloads import (
     delete_NoComment_for_app,
     dismiss_loaded_apps,
     get_add_status,
+    get_api_sources,
     get_api_related_entries,
     get_daily_add_usage,
     get_icon_data_url,
@@ -173,12 +174,14 @@ def StartAddViaNoComment(
     appid: int,
     baseAppid: int = 0,
     baseOwnedOnSteam: bool = False,
+    sourceApi: str = "",
     contentScriptQuery: str = "",
 ) -> str:
     return start_add_via_NoComment(
         appid,
         base_appid=baseAppid,
         base_owned_on_steam=bool(baseOwnedOnSteam),
+        preferred_api_name=sourceApi,
     )
 
 
@@ -252,6 +255,10 @@ def GetSteamDbRelatedEntries(appid: int, contentScriptQuery: str = "") -> str:
 
 def GetApiRelatedEntries(appid: int, contentScriptQuery: str = "") -> str:
     return get_api_related_entries(appid)
+
+
+def GetApiSources(contentScriptQuery: str = "") -> str:
+    return get_api_sources()
 
 
 def GetGameInstallPath(appid: int, contentScriptQuery: str = "") -> str:

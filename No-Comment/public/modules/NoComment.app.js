@@ -1237,6 +1237,141 @@
                 if (!isNaN(cached)) return cached;
                 return NaN;
             }
+            function showSourcePickerForApp(appid) {
+                if (document.querySelector('.NoComment-source-picker-overlay')) return;
+                ensureNoCommentStyles();
+
+                const overlay = document.createElement('div');
+                overlay.className = 'NoComment-source-picker-overlay';
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:100001;display:flex;align-items:center;justify-content:center;';
+
+                const modal = document.createElement('div');
+                modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:10px;min-width:420px;max-width:540px;padding:28px 30px;box-shadow:0 20px 60px rgba(0,0,0,.9), 0 0 0 1px rgba(102,192,244,0.4);';
+
+                const titleEl = document.createElement('div');
+                titleEl.style.cssText = 'font-size:20px;color:#fff;margin-bottom:12px;font-weight:700;text-align:left;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+                titleEl.textContent = t('menu.downloadSourceTitle', 'Choose Download Source');
+
+                const hintEl = document.createElement('div');
+                hintEl.style.cssText = 'font-size:13px;line-height:1.5;margin-bottom:16px;color:#c7d5e0;text-align:left;';
+                hintEl.textContent = t(
+                    'menu.downloadSourceHint',
+                    'Select a source to try only that API, or choose Auto.'
+                );
+
+                const optionsWrap = document.createElement('div');
+                optionsWrap.style.cssText = 'display:flex;flex-direction:column;gap:10px;max-height:260px;overflow:auto;';
+
+                const btnRow = document.createElement('div');
+                btnRow.style.cssText = 'display:flex;justify-content:flex-end;margin-top:18px;';
+
+                const cancelBtn = document.createElement('a');
+                cancelBtn.href = '#';
+                cancelBtn.className = 'NoComment-btn';
+                cancelBtn.style.minWidth = '120px';
+                cancelBtn.innerHTML = `<span>${lt('Cancel')}</span>`;
+                cancelBtn.onclick = function(e) {
+                    e.preventDefault();
+                    overlay.remove();
+                };
+
+                btnRow.appendChild(cancelBtn);
+
+                async function removeExistingNoComment(appid) {
+                    if (typeof Millennium === 'undefined' || typeof Millennium.callServerMethod !== 'function') {
+                        return false;
+                    }
+                    try {
+                        await Millennium.callServerMethod('No-Comment', 'DeleteNoCommentForApp', { appid, contentScriptQuery: '' });
+                        try {
+                            if (typeof invalidateInstalledLuaScriptsCache === 'function') {
+                                invalidateInstalledLuaScriptsCache();
+                            }
+                            window.__NoCommentButtonInserted = false;
+                            window.__NoCommentPresenceCheckInFlight = false;
+                            window.__NoCommentPresenceCheckAppId = undefined;
+                            addNoCommentButton();
+                        } catch(_) {}
+                        return true;
+                    } catch(err) {
+                        const msg = (err && err.message) ? err.message : t('menu.remove.failure', 'Failed to remove NoComment.');
+                        ShowNoCommentAlert('No-Comment', msg);
+                        return false;
+                    }
+                }
+
+                async function startAddWithSource(appid, sourceValue) {
+                    if (runState.inProgress) {
+                        ShowNoCommentAlert('No-Comment', t('menu.error.busy', 'Another operation is already in progress.'));
+                        return;
+                    }
+                    const removed = await removeExistingNoComment(appid);
+                    if (!removed) {
+                        return;
+                    }
+                    const started = await startAddViaNoCommentFlow(appid, { showOverlay: true, sourceApi: sourceValue });
+                    if (started) {
+                        setTimeout(refreshDailyAddUsage, 600);
+                    }
+                }
+
+                function addOption(label, value) {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'NoComment-tools-action';
+                    btn.style.justifyContent = 'center';
+                    const textSpan = document.createElement('span');
+                    textSpan.textContent = String(label || '');
+                    btn.appendChild(textSpan);
+                    btn.addEventListener('click', async function(e){
+                        e.preventDefault();
+                        overlay.remove();
+                        await startAddWithSource(appid, value);
+                    });
+                    optionsWrap.appendChild(btn);
+                }
+
+                function buildOptions(sources) {
+                    optionsWrap.innerHTML = '';
+                    addOption(t('menu.downloadSourceAuto', 'Auto (first working source)'), '');
+                    const list = Array.isArray(sources) ? sources : [];
+                    list.forEach(function(src) {
+                        if (!src || !src.name) return;
+                        addOption(String(src.name), String(src.name));
+                    });
+                    if (!list.length) {
+                        const empty = document.createElement('div');
+                        empty.className = 'NoComment-search-meta';
+                        empty.textContent = t('menu.downloadSourceNone', 'No sources available.');
+                        optionsWrap.appendChild(empty);
+                    }
+                }
+
+                buildOptions([]);
+                if (typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
+                    Millennium.callServerMethod('No-Comment', 'GetApiSources', { contentScriptQuery: '' }).then(function(res){
+                        try {
+                            const payload = typeof res === 'string' ? JSON.parse(res) : res;
+                            if (!payload || payload.success !== true) return;
+                            buildOptions(payload.sources || []);
+                        } catch(_) {}
+                    }).catch(function(){});
+                }
+
+                modal.appendChild(titleEl);
+                modal.appendChild(hintEl);
+                modal.appendChild(optionsWrap);
+                modal.appendChild(btnRow);
+                overlay.appendChild(modal);
+
+                overlay.addEventListener('click', function(e){
+                    if (e.target === overlay) {
+                        overlay.remove();
+                    }
+                });
+
+                document.body.appendChild(overlay);
+            }
 
             const fixesMenuBtn = createMenuButton('lt-settings-fixes-menu', 'menu.fixesMenu', 'Fixes Menu', 'fa-wrench');
 
@@ -1272,6 +1407,7 @@
             container.appendChild(searchWrap);
 
             createSectionLabel('menu.advancedLabel', 'Advanced');
+            const selectSourceBtn = createMenuButton('lt-settings-select-source', 'menu.downloadSourceButton', 'Select Download Source', 'fa-server');
             const restartBtn = createMenuButton('lt-settings-restart-steam', 'menu.restartSteam', 'Restart Steam', 'fa-power-off');
             const fetchApisBtn = createMenuButton('lt-settings-fetch-apis', 'menu.fetchFreeApis', 'Fetch Free APIs', 'fa-server');
             const checkUpdatesBtn = createMenuButton('lt-settings-check-updates', 'menu.checkUpdates', 'Check for updates', 'fa-arrows-rotate');
@@ -1513,6 +1649,27 @@
                 });
             }
 
+            if (selectSourceBtn) {
+                selectSourceBtn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    if (runState.inProgress) {
+                        ShowNoCommentAlert('No-Comment', t('menu.error.busy', 'Another operation is already in progress.'));
+                        return;
+                    }
+                    try {
+                        const appid = getSettingsMenuAppId();
+                        if (isNaN(appid)) {
+                            const errText = t('menu.error.noAppId', 'Could not determine game AppID');
+                            ShowNoCommentAlert('No-Comment', errText);
+                            return;
+                        }
+                        showSourcePickerForApp(appid);
+                    } catch(err) {
+                        backendLog('NoComment: Select source button error: ' + err);
+                    }
+                });
+            }
+
             if (addGameBtn) {
                 addGameBtn.addEventListener('click', async function(e){
                     e.preventDefault();
@@ -1604,10 +1761,12 @@
                     if (addGameBtn) addGameBtn.style.display = 'none';
                     removeBtn.style.display = 'none';
                     refreshCacheBtn.style.display = 'none';
+                    if (selectSourceBtn) selectSourceBtn.style.display = 'none';
                 } else if (typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
                     if (addGameBtn) addGameBtn.style.display = 'flex';
                     removeBtn.style.display = 'none';
                     refreshCacheBtn.style.display = 'flex';
+                    if (selectSourceBtn) selectSourceBtn.style.display = 'flex';
                     Millennium.callServerMethod('No-Comment', 'HasNoCommentForApp', { appid, contentScriptQuery: '' }).then(function(res){
                         try {
                             const payload = typeof res === 'string' ? JSON.parse(res) : res;
@@ -1660,11 +1819,13 @@
                     if (addGameBtn) addGameBtn.style.display = 'flex';
                     removeBtn.style.display = 'none';
                     refreshCacheBtn.style.display = 'flex';
+                    if (selectSourceBtn) selectSourceBtn.style.display = 'flex';
                 }
             } catch(_) {
                 if (addGameBtn) addGameBtn.style.display = 'none';
                 removeBtn.style.display = 'none';
                 refreshCacheBtn.style.display = 'none';
+                if (selectSourceBtn) selectSourceBtn.style.display = 'none';
             }
         });
     }
@@ -1931,6 +2092,7 @@
 
         const opts = (options && typeof options === 'object') ? options : {};
         const shouldShowOverlay = opts.showOverlay !== false;
+        const preferredSource = (opts && typeof opts.sourceApi === 'string') ? opts.sourceApi : '';
 
         try {
             const dlcInfo = await getDlcBaseGameInfo(parsedAppId);
@@ -1958,7 +2120,11 @@
         window.__NoCommentCurrentAppId = parsedAppId;
 
         try {
-            Millennium.callServerMethod('No-Comment', 'StartAddViaNoComment', { appid: parsedAppId, contentScriptQuery: '' });
+            Millennium.callServerMethod('No-Comment', 'StartAddViaNoComment', {
+                appid: parsedAppId,
+                sourceApi: preferredSource,
+                contentScriptQuery: ''
+            });
             startPolling(parsedAppId);
             return true;
         } catch(err) {
